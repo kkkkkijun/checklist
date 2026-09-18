@@ -18,26 +18,22 @@
         <p class="save-status" id="save-status" role="status" aria-live="polite"></p>
       </div>
       <div class="toolbar__actions">
-        <button type="button" class="btn btn--toggle" id="edit-mode-toggle" aria-pressed="false">편집 모드</button>
+        <button type="button" class="btn btn--toggle toolbar__edit-desktop" id="edit-mode-toggle" data-edit-toggle="long" aria-pressed="false">편집 모드</button>
         <button type="button" class="btn btn--primary" id="add-category-btn">분류 추가</button>
         <details class="menu" id="backup-menu">
           <summary class="btn">백업</summary>
           <div class="menu__panel">
             <button type="button" class="menu__item" id="export-btn">JSON 파일로 내보내기</button>
             <button type="button" class="menu__item" id="import-btn">JSON 파일 불러오기</button>
+            <hr class="menu__sep">
+            <button type="button" class="menu__item" id="copy-text-btn">텍스트로 복사 (다른 기기로 옮기기)</button>
+            <button type="button" class="menu__item" id="paste-text-btn">텍스트 붙여넣어 불러오기</button>
             <input type="file" id="import-file" accept="application/json,.json" class="visually-hidden" tabindex="-1" aria-hidden="true">
-            <p class="menu__help">불러오기는 현재 목록을 파일 내용으로 교체합니다.</p>
+            <p class="menu__help">불러오기는 현재 목록을 통째로 교체합니다. 기기 간 옮길 때는 ‘텍스트로 복사’ 후 메신저로 보내고, 받은 기기에서 ‘붙여넣어 불러오기’를 쓰세요.</p>
           </div>
         </details>
       </div>
     </div>
-
-    <form class="inline-form add-category-form" id="add-category-form" hidden>
-      <label for="new-category-name" class="visually-hidden">새 분류 이름</label>
-      <input type="text" id="new-category-name" placeholder="새 분류 이름" maxlength="40" autocomplete="off" required>
-      <button type="submit" class="btn btn--primary">추가</button>
-      <button type="button" class="btn" id="add-category-cancel">취소</button>
-    </form>
 
     <section class="progress-card" aria-labelledby="overall-progress-title">
       <div class="progress-head">
@@ -74,8 +70,25 @@
       <label class="filter-option"><input type="radio" name="filter" value="done"><span>완료</span></label>
       <label class="filter-option"><input type="radio" name="filter" value="excluded"><span>제외</span></label>
     </fieldset>
+    <button type="button" class="btn btn--toggle toolbar__edit-mobile" id="edit-mode-toggle-sticky" data-edit-toggle="short" aria-pressed="false">편집</button>
     <div class="category-tabs" id="category-tabs" role="tablist" aria-label="분류 선택"></div>
   </div>
+
+  <form class="inline-form add-category-form" id="add-category-form" hidden>
+    <label for="new-category-name" class="visually-hidden">새 분류 이름</label>
+    <input type="text" id="new-category-name" placeholder="새 분류 이름" maxlength="40" autocomplete="off" required>
+    <button type="submit" class="btn btn--primary">추가</button>
+    <button type="button" class="btn" id="add-category-cancel">취소</button>
+  </form>
+
+  <form class="paste-import" id="paste-import" hidden>
+    <label for="paste-import-text" class="paste-import__label">다른 기기에서 복사한 백업 텍스트를 붙여넣으세요</label>
+    <textarea id="paste-import-text" rows="4" placeholder='{"version":1,"categories":[...],"items":[...]}' spellcheck="false"></textarea>
+    <div class="note-form__actions">
+      <button type="submit" class="btn btn--primary">불러오기 (현재 목록 교체)</button>
+      <button type="button" class="btn" id="paste-import-cancel">취소</button>
+    </div>
+  </form>
 
   <p class="notice notice--warn" id="storage-warning" hidden></p>
   <p class="notice notice--template">참고용 준비물 목록입니다. 병원·조리원 준비물 안내에 맞춰 목록과 수량을 수정하세요.</p>

@@ -241,7 +241,7 @@
 
   /* ---------- state ---------- */
   var state;
-  var ui = { filter: 'all', editMode: false, pendingUndo: null, undoTimer: null, collapsed: {}, noteForm: null, qtyEdit: null, highlightEdit: false, activeCategory: null, highlightsCollapsed: false };
+  var ui = { filter: 'all', editMode: false, pendingUndo: null, undoTimer: null, collapsed: {}, noteForm: null, qtyEdit: null, highlightEdit: false, activeCategory: null, highlightsCollapsed: false, itemEdit: null };
 
   // Active tab (narrow screens): falls back to the first category when the saved one is gone.
   function activeCategoryId() {
@@ -253,6 +253,7 @@
   function setActiveCategory(id) {
     ui.activeCategory = id;
     ui.qtyEdit = null;
+    ui.itemEdit = null;
     saveUiPrefs();
     render();
   }
@@ -368,8 +369,10 @@
     renderCategories();
     renderNotes();
     renderHighlights();
-    $('#edit-mode-toggle').setAttribute('aria-pressed', ui.editMode ? 'true' : 'false');
-    $('#edit-mode-toggle').textContent = ui.editMode ? '편집 완료' : '편집 모드';
+    Array.prototype.forEach.call(document.querySelectorAll('[data-edit-toggle]'), function (b) {
+      b.setAttribute('aria-pressed', ui.editMode ? 'true' : 'false');
+      b.textContent = ui.editMode ? '편집 완료' : (b.dataset.editToggle === 'short' ? '편집' : '편집 모드');
+    });
     if (activeKey) {
       var target = document.querySelector('[data-focus-key="' + activeKey + '"]');
       if (target) target.focus({ preventScroll: true });
@@ -388,7 +391,7 @@
     renderOverall();
     renderTabs();
     state.categories.forEach(function (cat) {
-      var card = document.querySelector('[data-category-id="' + cat.id + '"]');
+      var card = document.querySelector('.category[data-category-id="' + cat.id + '"]');
       if (!card) return;
       var p = computeProgress(itemsOf(cat.id));
       $('.progress-text', card).textContent = progressText(p);
@@ -420,7 +423,7 @@
         (cat.icon ? '<span class="category-tab__icon" aria-hidden="true">' + escapeHtml(cat.icon) + '</span>' : '') +
         '<span class="category-tab__name">' + escapeHtml(cat.name) + '</span>' +
         '<span class="category-tab__count">' + escapeHtml(count) + '</span></button>';
-    }).join('');
+    }).join('') + '<button type="button" class="category-tab category-tab--add" data-action="add-category-tab" aria-label="분류 추가">+</button>';
   }
 
   function renderCategory(cat) {
@@ -536,12 +539,26 @@
 
   function renderItemEdit(it) {
     var id = escapeHtml(it.id);
+    var badges = (it.excluded ? ' <span class="badge badge--excluded">제외됨</span>' : '') + (it.done && !it.excluded ? ' <span class="badge badge--done">완료</span>' : '');
+    if (ui.itemEdit !== it.id) {
+      // Compact row: keeps edit mode short on phones; one item expands at a time.
+      var c = 'item item--edit-compact' + (it.done ? ' is-done' : '') + (it.excluded ? ' is-excluded' : '');
+      var h = '<li class="' + c + '" data-item-id="' + id + '"><div class="item__edit-row">';
+      h += '<span class="item__body"><span class="item__name">' + escapeHtml(it.name) + '</span>' + badges;
+      if (it.memo) h += '<span class="item__memo">' + escapeHtml(it.memo) + '</span>';
+      h += '</span>';
+      h += '<span class="item__edit-btns">';
+      h += '<button type="button" class="btn btn--small" data-action="open-item-edit" data-focus-key="iedit:' + id + '" aria-label="' + escapeHtml(it.name) + ' 수정">수정</button>';
+      h += '<button type="button" class="btn btn--small btn--danger" data-action="delete-item" data-focus-key="del:' + id + '" aria-label="' + escapeHtml(it.name) + ' 삭제">삭제</button>';
+      h += '</span></div></li>';
+      return h;
+    }
     var cls = 'item item--edit' + (it.done ? ' is-done' : '') + (it.excluded ? ' is-excluded' : '');
     var isCustom = it.unit && UNIT_PRESETS.indexOf(it.unit) === -1;
     var html = '<li class="' + cls + '" data-item-id="' + id + '">';
     html += '<div class="item__edit-grid">';
 
-    html += '<div class="field"><label for="name-' + id + '">이름' + (it.excluded ? ' <span class="badge badge--excluded">제외됨</span>' : '') + (it.done && !it.excluded ? ' <span class="badge badge--done">완료</span>' : '') + '</label>';
+    html += '<div class="field"><label for="name-' + id + '">이름' + badges + '</label>';
     html += '<input type="text" id="name-' + id + '" data-field="name" data-focus-key="name:' + id + '" value="' + escapeHtml(it.name) + '" maxlength="60" required></div>';
 
     html += '<div class="field-row field-row--unit">';
@@ -568,6 +585,7 @@
     html += '</select></div>';
     html += '<button type="button" class="btn btn--small" data-action="toggle-excluded" data-focus-key="excl:' + id + '">' + (it.excluded ? '다시 포함' : '준비 대상에서 제외') + '</button>';
     html += '<button type="button" class="btn btn--small btn--danger" data-action="delete-item" data-focus-key="del:' + id + '" aria-label="' + escapeHtml(it.name) + ' 삭제">삭제</button>';
+    html += '<button type="button" class="btn btn--small btn--primary" data-action="close-item-edit" data-focus-key="iclose:' + id + '">완료</button>';
     html += '</div>';
 
     html += '</div></li>';
@@ -799,7 +817,7 @@
     cat.icon = icon;
     saveState();
     // Keep the input and preset buttons in sync without a full re-render (focus stays put).
-    var card = document.querySelector('[data-category-id="' + id + '"]');
+    var card = document.querySelector('.category[data-category-id="' + id + '"]');
     if (!card) return;
     var input = $('[data-action="set-icon"]', card);
     if (input && input.value !== icon) input.value = icon;
@@ -875,6 +893,7 @@
     var it = findItem(id);
     if (!it || !findCategory(categoryId) || it.categoryId === categoryId) return;
     it.categoryId = categoryId;
+    ui.itemEdit = null;
     commit();
     showToast('‘' + it.name + '’ 항목을 ‘' + findCategory(categoryId).name + '’ 분류로 이동했습니다.');
   }
@@ -938,15 +957,62 @@
   }
 
   /* ---------- backup ---------- */
-  function exportJson() {
-    var payload = JSON.stringify({
+  function backupPayload(pretty) {
+    return JSON.stringify({
       version: DATA_VERSION,
       exportedAt: new Date().toISOString(),
       categories: state.categories,
       items: state.items,
       notes: state.notes,
       highlights: state.highlights
-    }, null, 2);
+    }, null, pretty ? 2 : 0);
+  }
+
+  function copyBackupText() {
+    var text = backupPayload(false);
+    var done = function () { showToast('백업 텍스트를 복사했습니다. 메신저 등으로 다른 기기에 보낸 뒤 ‘텍스트 붙여넣어 불러오기’에 붙여넣으세요.'); };
+    var fail = function () {
+      // Fallback: show the text so it can be selected and copied by hand.
+      var panel = $('#paste-import');
+      panel.hidden = false;
+      var ta = $('#paste-import-text');
+      ta.value = text;
+      ta.focus();
+      ta.select();
+      showToast('자동 복사가 막혀 있어 텍스트를 표시했습니다. 전체 선택 후 복사하세요.');
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, fail);
+    } else {
+      fail();
+    }
+  }
+
+  function importJsonText(text, sourceLabel) {
+    var parsed;
+    try {
+      parsed = JSON.parse(String(text || '').trim());
+    } catch (e) {
+      showToast('JSON 형식이 아닙니다. 기존 기록은 그대로 유지됩니다.');
+      return false;
+    }
+    var result = normalizeState(parsed);
+    if (!result.ok) {
+      showToast('불러올 수 없는 ' + sourceLabel + '입니다: ' + result.error + ' 기존 기록은 그대로 유지됩니다.');
+      return false;
+    }
+    var msg = '현재 목록(분류 ' + state.categories.length + '개, 준비물 ' + state.items.length + '개, 진료 메모 ' + state.notes.length + '개)을 ' + sourceLabel + ' 내용(분류 ' + result.data.categories.length + '개, 준비물 ' + result.data.items.length + '개, 진료 메모 ' + result.data.notes.length + '개)으로 교체합니다. 기존 기록은 사라집니다. 계속할까요?';
+    if (!window.confirm(msg)) { showToast('불러오기를 취소했습니다.'); return false; }
+    state = result.data;
+    ui.itemEdit = null; ui.qtyEdit = null; ui.noteForm = null; ui.highlightEdit = false;
+    hideToast();
+    commit();
+    showToast(sourceLabel + '을 불러왔습니다.');
+    return true;
+  }
+
+  function exportJson() {
+    var payload = backupPayload(true);
     var blob = new Blob([payload], { type: 'application/json' });
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
@@ -963,26 +1029,7 @@
     if (!file) return;
     var reader = new FileReader();
     reader.onerror = function () { showToast('파일을 읽지 못했습니다. 기존 기록은 그대로 유지됩니다.'); };
-    reader.onload = function () {
-      var parsed;
-      try {
-        parsed = JSON.parse(String(reader.result));
-      } catch (e) {
-        showToast('JSON 형식이 아닙니다. 기존 기록은 그대로 유지됩니다.');
-        return;
-      }
-      var result = normalizeState(parsed);
-      if (!result.ok) {
-        showToast('불러올 수 없는 파일입니다: ' + result.error + ' 기존 기록은 그대로 유지됩니다.');
-        return;
-      }
-      var msg = '현재 목록(분류 ' + state.categories.length + '개, 준비물 ' + state.items.length + '개)을 파일 내용(분류 ' + result.data.categories.length + '개, 준비물 ' + result.data.items.length + '개)으로 교체합니다. 기존 기록은 사라집니다. 계속할까요?';
-      if (!window.confirm(msg)) { showToast('불러오기를 취소했습니다.'); return; }
-      state = result.data;
-      hideToast();
-      commit();
-      showToast('백업 파일을 불러왔습니다.');
-    };
+    reader.onload = function () { importJsonText(String(reader.result), '백업 파일'); };
     reader.readAsText(file);
   }
 
@@ -992,16 +1039,27 @@
       if (e.target.name === 'filter') { ui.filter = e.target.value; render(); }
     });
 
-    $('#edit-mode-toggle').addEventListener('click', function () {
-      ui.editMode = !ui.editMode;
-      ui.qtyEdit = null;
-      render();
+    Array.prototype.forEach.call(document.querySelectorAll('[data-edit-toggle]'), function (b) {
+      b.addEventListener('click', function () {
+        ui.editMode = !ui.editMode;
+        ui.qtyEdit = null;
+        ui.itemEdit = null;
+        render();
+      });
     });
 
-    $('#add-category-btn').addEventListener('click', function () {
+    function openAddCategory(toggle) {
       var form = $('#add-category-form');
-      form.hidden = !form.hidden;
-      if (!form.hidden) $('#new-category-name').focus();
+      form.hidden = toggle ? !form.hidden : false;
+      if (!form.hidden) {
+        $('#paste-import').hidden = true;
+        $('#new-category-name').focus();
+        form.scrollIntoView({ block: 'nearest' });
+      }
+    }
+    $('#add-category-btn').addEventListener('click', function () { openAddCategory(true); });
+    $('#category-tabs').addEventListener('click', function (e) {
+      if (e.target.closest('[data-action="add-category-tab"]')) openAddCategory(false);
     });
     $('#add-category-cancel').addEventListener('click', function () {
       $('#add-category-form').hidden = true;
@@ -1020,6 +1078,30 @@
 
     $('#export-btn').addEventListener('click', function () { $('#backup-menu').open = false; exportJson(); });
     $('#import-btn').addEventListener('click', function () { $('#backup-menu').open = false; $('#import-file').click(); });
+    $('#copy-text-btn').addEventListener('click', function () { $('#backup-menu').open = false; copyBackupText(); });
+    $('#paste-text-btn').addEventListener('click', function () {
+      $('#backup-menu').open = false;
+      $('#add-category-form').hidden = true;
+      var panel = $('#paste-import');
+      panel.hidden = false;
+      $('#paste-import-text').value = '';
+      $('#paste-import-text').focus();
+      panel.scrollIntoView({ block: 'nearest' });
+    });
+    $('#paste-import-cancel').addEventListener('click', function () {
+      $('#paste-import').hidden = true;
+      $('#paste-import-text').value = '';
+      $('#backup-menu').querySelector('summary').focus();
+    });
+    $('#paste-import').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var text = $('#paste-import-text').value;
+      if (!text.trim()) { showToast('붙여넣은 내용이 없습니다.'); return; }
+      if (importJsonText(text, '백업 텍스트')) {
+        $('#paste-import').hidden = true;
+        $('#paste-import-text').value = '';
+      }
+    });
     $('#import-file').addEventListener('change', function (e) {
       var file = e.target.files && e.target.files[0];
       importJsonFile(file);
@@ -1127,6 +1209,22 @@
         case 'pick-icon': setCategoryIcon(card.dataset.categoryId, btn.dataset.icon || ''); break;
         case 'delete-item': deleteItem(row.dataset.itemId); break;
         case 'toggle-excluded': toggleExcluded(row.dataset.itemId); break;
+        case 'open-item-edit': {
+          var oid = row.dataset.itemId;
+          ui.itemEdit = oid;
+          render();
+          var nameInput = document.querySelector('[data-focus-key="name:' + oid + '"]');
+          if (nameInput) nameInput.focus();
+          break;
+        }
+        case 'close-item-edit': {
+          var ccid = row.dataset.itemId;
+          ui.itemEdit = null;
+          render();
+          var editBtn = document.querySelector('[data-focus-key="iedit:' + ccid + '"]');
+          if (editBtn) editBtn.focus();
+          break;
+        }
         case 'edit-qty': {
           var iid = row.dataset.itemId;
           ui.qtyEdit = ui.qtyEdit === iid ? null : iid;
