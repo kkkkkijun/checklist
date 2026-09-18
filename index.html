@@ -67,6 +67,15 @@
 
   <main id="categories" class="categories" aria-label="분류별 준비물"></main>
 
+  <section id="notes" class="notes" aria-labelledby="notes-title">
+    <div class="notes__head">
+      <h2 id="notes-title" class="notes__title">🏥 산부인과 진료 메모 <span class="notes__count" id="notes-count"></span></h2>
+      <button type="button" class="btn btn--primary" id="add-note-btn">메모 추가</button>
+    </div>
+    <p class="notice notes__hint">진료 때 들은 내용, 검사 결과, 다음 일정을 날짜별로 남겨 두세요. 체크리스트와 함께 이 기기에 저장되고 JSON 백업에도 포함됩니다.</p>
+    <ul class="notes-list" id="notes-list"></ul>
+  </section>
+
   <footer class="app-footer">
     <p class="notice">기록은 현재 기기의 브라우저에 저장됩니다. 다른 기기와 자동으로 동기화되지 않으며, 브라우저 데이터를 삭제하면 기록이 사라질 수 있습니다. 상단 <strong>백업</strong> 메뉴에서 JSON 파일로 내보내 보관하세요.</p>
   </footer>

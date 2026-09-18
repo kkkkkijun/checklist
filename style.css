@@ -255,7 +255,33 @@ input[type="number"] { -moz-appearance: textfield; }
 .item.is-excluded { opacity: 0.75; background: #f6f3f0; border-color: var(--border); }
 .item.is-excluded .item__name { color: var(--muted); }
 
-.item__row { display: flex; align-items: center; gap: 8px; }
+.item__row { display: grid; grid-template-columns: minmax(0, 1fr) 38%; align-items: center; gap: 6px; }
+.items-colhead {
+  display: grid; grid-template-columns: minmax(0, 1fr) 38%; gap: 6px;
+  font-size: 0.72rem; color: var(--muted); padding: 0 6px 4px 40px;
+}
+.items-colhead span:last-child { text-align: right; padding-right: 6px; }
+.item__side {
+  display: flex; justify-content: flex-end; align-items: center;
+  min-height: var(--tap); border-left: 1px solid var(--border); padding-left: 6px; min-width: 0;
+}
+.item__qty {
+  width: 100%; min-height: 40px; padding: 0 8px; text-align: right;
+  border: 1px solid transparent; border-radius: 8px; background: transparent;
+  font-size: 0.95rem; font-weight: 600; font-variant-numeric: tabular-nums; cursor: pointer;
+  color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.item__qty:hover { background: var(--peach-soft); border-color: var(--peach); }
+.item__qty--empty { color: var(--muted); font-weight: 500; font-size: 0.85rem; }
+.item__qty[aria-expanded="true"] { background: var(--peach-soft); border-color: var(--peach-strong); }
+.is-qty-editing { background: #fffdfb; border-color: var(--border); }
+.item__qty-edit { display: grid; gap: 6px; padding: 4px 4px 8px 4px; }
+.item__qty-edit__row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 6px; align-items: end; }
+.item__qty-done { min-height: var(--tap); }
+@media (max-width: 360px) {
+  .item__qty-edit__row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .item__qty-done { grid-column: 1 / -1; }
+}
 
 .item__check {
   display: flex; align-items: flex-start; gap: 10px; flex: 1; min-width: 0; cursor: pointer;
@@ -298,6 +324,45 @@ input[type="number"] { -moz-appearance: textfield; }
 
 .add-item-form { margin-top: 8px; }
 .add-item-form .btn { flex-shrink: 0; }
+
+/* ---------- 진료 메모 ---------- */
+.notes { margin-top: 24px; }
+.notes__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.notes__title { font-size: 1.15rem; margin: 0; min-width: 0; }
+.notes__count { font-size: 0.85rem; font-weight: 500; color: var(--muted); margin-left: 4px; }
+.notes__hint { margin: 6px 0 10px; }
+.notes-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+@media (min-width: 960px) { .notes-list { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; } }
+.notes-empty {
+  background: var(--card); border: 1px dashed var(--border); border-radius: var(--radius);
+  padding: 20px 16px; text-align: center; color: var(--muted); font-size: 0.9rem; grid-column: 1 / -1;
+}
+.note {
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: var(--shadow); padding: 12px 14px; min-width: 0;
+}
+.note--editing { grid-column: 1 / -1; background: #fffdfb; }
+.note__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.note__meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; min-width: 0; }
+.note__date { font-weight: 700; }
+.note__title { color: var(--muted); font-size: 0.92rem; }
+.note__actions { display: flex; gap: 6px; flex-shrink: 0; }
+.note__body { margin: 8px 0 0; white-space: pre-wrap; line-height: 1.55; font-size: 0.95rem; }
+.note-form { display: grid; gap: 8px; }
+.note-form textarea {
+  width: 100%; min-height: 140px; padding: 10px 12px; border: 1px solid var(--border);
+  border-radius: 10px; background: #fff; resize: vertical; line-height: 1.5;
+}
+input[type="date"] {
+  min-height: var(--tap); padding: 8px 12px; border: 1px solid var(--border); border-radius: 10px;
+  background: #fff; width: 100%; min-width: 0;
+}
+.note-form__actions { display: flex; gap: 8px; flex-wrap: wrap; }
+@media (max-width: 480px) {
+  .notes__head { flex-wrap: wrap; }
+  .notes__head .btn { width: 100%; }
+  .note-form .field-row { grid-template-columns: 1fr; }
+}
 
 /* ---------- Toast ---------- */
 .toast {

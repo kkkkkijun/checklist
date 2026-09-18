@@ -9,6 +9,7 @@
   var UNDO_MS = 8000;
   var ICON_PRESETS = ['👶', '🤱', '🧳', '🍼', '🧸', '🏥', '🎒', '🧴', '👕', '📄', '✨'];
   var ICON_MAX = 16; // UTF-16 code units; enough for one multi-codepoint emoji
+  var NOTE_MAX = 5000;
 
   function defaultIconFor(name) {
     for (var i = 0; i < DEFAULT_TEMPLATE.length; i++) {
@@ -74,7 +75,7 @@
         items.push({ id: uid(), categoryId: cid, name: name, qty: null, unit: '', memo: '', done: false, excluded: false });
       });
     });
-    return { version: DATA_VERSION, categories: categories, items: items };
+    return { version: DATA_VERSION, categories: categories, items: items, notes: [] };
   }
 
   // Validates and normalises an unknown object into app state. Returns { ok, data, error }.
@@ -132,7 +133,26 @@
         excluded: it.excluded === true
       });
     }
-    return { ok: true, migrated: migrated, data: { version: DATA_VERSION, categories: categories, items: items } };
+    // notes are optional (added after v1 launch); missing or malformed list => empty
+    var notes = [];
+    if (raw.notes !== undefined) {
+      if (!Array.isArray(raw.notes)) return { ok: false, error: '진료 메모 목록이 올바르지 않습니다.' };
+      var seenNote = {};
+      for (var k = 0; k < raw.notes.length; k++) {
+        var nt = raw.notes[k];
+        if (!nt || typeof nt !== 'object') return { ok: false, error: (k + 1) + '번째 진료 메모가 올바르지 않습니다.' };
+        var nid = typeof nt.id === 'string' ? nt.id.trim() : '';
+        if (!nid) return { ok: false, error: (k + 1) + '번째 진료 메모에 ID가 없습니다.' };
+        if (seenNote[nid]) return { ok: false, error: '진료 메모 ID가 중복되었습니다: ' + nid };
+        seenNote[nid] = true;
+        var ndate = typeof nt.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(nt.date) ? nt.date : '';
+        var ntitle = typeof nt.title === 'string' ? nt.title.trim().slice(0, 60) : '';
+        var nbody = typeof nt.body === 'string' ? nt.body.replace(/\r\n?/g, '\n').trim().slice(0, NOTE_MAX) : '';
+        if (!ntitle && !nbody) return { ok: false, error: (k + 1) + '번째 진료 메모가 비어 있습니다.' };
+        notes.push({ id: nid, date: ndate, title: ntitle, body: nbody });
+      }
+    }
+    return { ok: true, migrated: migrated, data: { version: DATA_VERSION, categories: categories, items: items, notes: notes } };
   }
 
   /* ---------- storage ---------- */
@@ -205,7 +225,7 @@
 
   /* ---------- state ---------- */
   var state;
-  var ui = { filter: 'all', editMode: false, pendingUndo: null, undoTimer: null, collapsed: {} };
+  var ui = { filter: 'all', editMode: false, pendingUndo: null, undoTimer: null, collapsed: {}, noteForm: null, qtyEdit: null };
 
   function loadUiPrefs() {
     try {
@@ -303,6 +323,7 @@
     var activeKey = focusKeyOf(document.activeElement);
     renderOverall();
     renderCategories();
+    renderNotes();
     $('#edit-mode-toggle').setAttribute('aria-pressed', ui.editMode ? 'true' : 'false');
     $('#edit-mode-toggle').textContent = ui.editMode ? '편집 완료' : '편집 모드';
     if (activeKey) {
@@ -380,6 +401,7 @@
     if (visible.length === 0) {
       html += '<p class="items-empty">' + escapeHtml(emptyMessage(catItems)) + '</p>';
     } else {
+      if (!ui.editMode) html += '<div class="items-colhead" aria-hidden="true"><span>준비물</span><span>필요 수량</span></div>';
       html += '<ul class="items">' + visible.map(ui.editMode ? renderItemEdit : renderItemView).join('') + '</ul>';
     }
 
@@ -393,26 +415,60 @@
     return html;
   }
 
+  function qtyLabel(it) {
+    if (it.qty === null) return '';
+    return it.qty + (it.unit ? it.unit : '');
+  }
+
+  function unitSelectHtml(it, id, focusPrefix) {
+    var isCustom = it.unit && UNIT_PRESETS.indexOf(it.unit) === -1;
+    var html = '<select id="' + focusPrefix + 'unit-' + id + '" data-field="unit-select" data-focus-key="' + focusPrefix + 'unit:' + id + '">';
+    html += '<option value=""' + (!it.unit ? ' selected' : '') + '>선택 안 함</option>';
+    UNIT_PRESETS.forEach(function (u) {
+      html += '<option value="' + escapeHtml(u) + '"' + (it.unit === u ? ' selected' : '') + '>' + escapeHtml(u) + '</option>';
+    });
+    html += '<option value="__custom__"' + (isCustom ? ' selected' : '') + '>직접 입력</option>';
+    html += '</select>';
+    return html;
+  }
+
   function renderItemView(it) {
-    var cls = 'item' + (it.done ? ' is-done' : '') + (it.excluded ? ' is-excluded' : '');
-    var meta = [];
-    if (it.qty !== null) meta.push('수량 ' + it.qty + (it.unit ? it.unit : ''));
-    else if (it.unit) meta.push('단위 ' + it.unit);
-    var html = '<li class="' + cls + '" data-item-id="' + escapeHtml(it.id) + '">';
+    var id = escapeHtml(it.id);
+    var editing = ui.qtyEdit === it.id && !it.excluded;
+    var cls = 'item' + (it.done ? ' is-done' : '') + (it.excluded ? ' is-excluded' : '') + (editing ? ' is-qty-editing' : '');
+    var html = '<li class="' + cls + '" data-item-id="' + id + '">';
     html += '<div class="item__row">';
     html += '<label class="item__check">';
-    html += '<input type="checkbox" data-action="toggle-done" data-focus-key="check:' + escapeHtml(it.id) + '"' + (it.done ? ' checked' : '') + (it.excluded ? ' disabled' : '') + ' aria-label="' + escapeHtml(it.name) + ' 가방에 담기 완료">';
+    html += '<input type="checkbox" data-action="toggle-done" data-focus-key="check:' + id + '"' + (it.done ? ' checked' : '') + (it.excluded ? ' disabled' : '') + ' aria-label="' + escapeHtml(it.name) + ' 가방에 담기 완료">';
     html += '<span class="item__body">';
     html += '<span class="item__name">' + escapeHtml(it.name) + '</span>';
     if (it.excluded) html += '<span class="badge badge--excluded">제외</span>';
     else if (it.done) html += '<span class="badge badge--done">완료</span>';
-    if (meta.length) html += '<span class="item__meta">' + escapeHtml(meta.join(' · ')) + '</span>';
     if (it.memo) html += '<span class="item__memo">' + escapeHtml(it.memo) + '</span>';
     html += '</span></label>';
+    html += '<div class="item__side">';
     if (it.excluded) {
-      html += '<button type="button" class="btn btn--small" data-action="toggle-excluded" data-focus-key="excl:' + escapeHtml(it.id) + '" aria-label="' + escapeHtml(it.name) + ' 다시 포함">다시 포함</button>';
+      html += '<button type="button" class="btn btn--small" data-action="toggle-excluded" data-focus-key="excl:' + id + '" aria-label="' + escapeHtml(it.name) + ' 다시 포함">다시 포함</button>';
+    } else {
+      var label = qtyLabel(it);
+      html += '<button type="button" class="item__qty' + (label ? '' : ' item__qty--empty') + '" data-action="edit-qty" data-focus-key="qty-btn:' + id + '" aria-expanded="' + (editing ? 'true' : 'false') + '" aria-label="' + escapeHtml(it.name) + ' 필요 수량 ' + (label ? escapeHtml(label) : '미입력') + ', 누르면 수정">' + (label ? escapeHtml(label) : '미입력') + '</button>';
     }
-    html += '</div></li>';
+    html += '</div></div>';
+    if (editing) {
+      var isCustom = it.unit && UNIT_PRESETS.indexOf(it.unit) === -1;
+      html += '<div class="item__qty-edit">';
+      html += '<div class="item__qty-edit__row">';
+      html += '<div class="field"><label for="q-qty-' + id + '">필요 수량</label>';
+      html += '<input type="number" id="q-qty-' + id + '" data-field="qty" data-focus-key="q-qty:' + id + '" value="' + (it.qty === null ? '' : it.qty) + '" min="1" step="1" inputmode="numeric" placeholder="미입력"></div>';
+      html += '<div class="field"><label for="q-unit-' + id + '">단위</label>' + unitSelectHtml(it, id, 'q-') + '</div>';
+      html += '<button type="button" class="btn btn--primary btn--small item__qty-done" data-action="close-qty" data-focus-key="q-done:' + id + '">완료</button>';
+      html += '</div>';
+      html += '<div class="field"' + (isCustom ? '' : ' hidden') + ' data-custom-unit><label for="q-unit-custom-' + id + '">단위 직접 입력</label>';
+      html += '<input type="text" id="q-unit-custom-' + id + '" data-field="unit-custom" data-focus-key="q-unitc:' + id + '" value="' + (isCustom ? escapeHtml(it.unit) : '') + '" maxlength="10" placeholder="예: 통, 병"></div>';
+      html += '<p class="field-error" data-error hidden></p>';
+      html += '</div>';
+    }
+    html += '</li>';
     return html;
   }
 
@@ -430,13 +486,7 @@
     html += '<div class="field"><label for="qty-' + id + '">필요 수량</label>';
     html += '<input type="number" id="qty-' + id + '" data-field="qty" data-focus-key="qty:' + id + '" value="' + (it.qty === null ? '' : it.qty) + '" min="1" step="1" inputmode="numeric" placeholder="미입력"></div>';
     html += '<div class="field"><label for="unit-' + id + '">단위</label>';
-    html += '<select id="unit-' + id + '" data-field="unit-select" data-focus-key="unit:' + id + '">';
-    html += '<option value=""' + (!it.unit ? ' selected' : '') + '>선택 안 함</option>';
-    UNIT_PRESETS.forEach(function (u) {
-      html += '<option value="' + escapeHtml(u) + '"' + (it.unit === u ? ' selected' : '') + '>' + escapeHtml(u) + '</option>';
-    });
-    html += '<option value="__custom__"' + (isCustom ? ' selected' : '') + '>직접 입력</option>';
-    html += '</select></div>';
+    html += unitSelectHtml(it, id, '') + '</div>';
     html += '</div>';
 
     html += '<div class="field"' + (isCustom ? '' : ' hidden') + ' data-custom-unit><label for="unit-custom-' + id + '">단위 직접 입력</label>';
@@ -460,6 +510,119 @@
 
     html += '</div></li>';
     return html;
+  }
+
+  /* ---------- 진료 메모 ---------- */
+  function sortedNotes() {
+    return state.notes.slice().sort(function (a, b) {
+      if (a.date !== b.date) return a.date < b.date ? 1 : -1; // newest first; '' (no date) last
+      return 0;
+    });
+  }
+
+  function formatNoteDate(d) {
+    if (!d) return '날짜 없음';
+    var parts = d.split('-');
+    return parts[0] + '년 ' + parseInt(parts[1], 10) + '월 ' + parseInt(parts[2], 10) + '일';
+  }
+
+  function noteFormHtml(note) {
+    var isNew = !note;
+    var id = isNew ? 'new' : escapeHtml(note.id);
+    var html = '<form class="note-form" data-note-form="' + id + '">';
+    html += '<div class="field-row"><div class="field"><label for="note-date-' + id + '">진료 날짜</label>';
+    html += '<input type="date" id="note-date-' + id + '" name="date" data-focus-key="note-date:' + id + '" value="' + escapeHtml(isNew ? todayStamp() : note.date) + '"></div>';
+    html += '<div class="field"><label for="note-title-' + id + '">제목 (선택)</label>';
+    html += '<input type="text" id="note-title-' + id + '" name="title" data-focus-key="note-title:' + id + '" value="' + escapeHtml(isNew ? '' : note.title) + '" maxlength="60" placeholder="예: 32주 정기검진"></div></div>';
+    html += '<div class="field"><label for="note-body-' + id + '">내용</label>';
+    html += '<textarea id="note-body-' + id + '" name="body" data-focus-key="note-body:' + id + '" rows="6" maxlength="' + NOTE_MAX + '" placeholder="선생님 말씀, 검사 결과, 다음 진료 일정 등을 한 줄씩 적어 두세요.">' + escapeHtml(isNew ? '' : note.body) + '</textarea></div>';
+    html += '<p class="field-error" data-error hidden></p>';
+    html += '<div class="note-form__actions"><button type="submit" class="btn btn--primary">' + (isNew ? '메모 저장' : '수정 저장') + '</button>';
+    html += '<button type="button" class="btn" data-action="cancel-note">취소</button></div>';
+    html += '</form>';
+    return html;
+  }
+
+  function renderNotes() {
+    var list = $('#notes-list');
+    var notes = sortedNotes();
+    var html = '';
+    if (ui.noteForm === 'new') html += '<li class="note note--editing">' + noteFormHtml(null) + '</li>';
+    if (notes.length === 0 && ui.noteForm !== 'new') {
+      html += '<li class="notes-empty">아직 진료 메모가 없습니다. ‘메모 추가’를 눌러 첫 기록을 남겨 보세요.</li>';
+    }
+    notes.forEach(function (n) {
+      if (ui.noteForm === n.id) {
+        html += '<li class="note note--editing" data-note-id="' + escapeHtml(n.id) + '">' + noteFormHtml(n) + '</li>';
+        return;
+      }
+      html += '<li class="note" data-note-id="' + escapeHtml(n.id) + '">';
+      html += '<div class="note__head"><div class="note__meta"><span class="note__date">' + escapeHtml(formatNoteDate(n.date)) + '</span>';
+      if (n.title) html += '<span class="note__title">' + escapeHtml(n.title) + '</span>';
+      html += '</div><div class="note__actions">';
+      html += '<button type="button" class="btn btn--small" data-action="edit-note" data-focus-key="note-edit:' + escapeHtml(n.id) + '" aria-label="' + escapeHtml(formatNoteDate(n.date)) + ' 메모 수정">수정</button>';
+      html += '<button type="button" class="btn btn--small btn--danger" data-action="delete-note" data-focus-key="note-del:' + escapeHtml(n.id) + '" aria-label="' + escapeHtml(formatNoteDate(n.date)) + ' 메모 삭제">삭제</button>';
+      html += '</div></div>';
+      if (n.body) html += '<p class="note__body">' + escapeHtml(n.body) + '</p>';
+      html += '</li>';
+    });
+    list.innerHTML = html;
+    $('#notes-count').textContent = notes.length ? notes.length + '개' : '';
+    $('#add-note-btn').hidden = ui.noteForm === 'new';
+  }
+
+  function readNoteForm(form) {
+    var date = form.elements.date.value;
+    if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) date = '';
+    var title = form.elements.title.value.trim().slice(0, 60);
+    var body = form.elements.body.value.replace(/\r\n?/g, '\n').trim().slice(0, NOTE_MAX);
+    return { date: date, title: title, body: body };
+  }
+
+  function submitNoteForm(form) {
+    var v = readNoteForm(form);
+    var err = $('[data-error]', form);
+    if (!v.title && !v.body) {
+      err.textContent = '내용이나 제목 중 하나는 입력해야 합니다.';
+      err.hidden = false;
+      form.elements.body.focus();
+      return;
+    }
+    var key = form.dataset.noteForm;
+    if (key === 'new') {
+      state.notes.push({ id: uid(), date: v.date, title: v.title, body: v.body });
+      ui.noteForm = null;
+      commit();
+      showToast('진료 메모를 저장했습니다.');
+      var addBtn = $('#add-note-btn');
+      if (addBtn) addBtn.focus();
+    } else {
+      var note = null;
+      for (var i = 0; i < state.notes.length; i++) if (state.notes[i].id === key) note = state.notes[i];
+      if (!note) { ui.noteForm = null; render(); return; }
+      note.date = v.date; note.title = v.title; note.body = v.body;
+      ui.noteForm = null;
+      commit();
+      showToast('진료 메모를 수정했습니다.');
+      var editBtn = document.querySelector('[data-focus-key="note-edit:' + key + '"]');
+      if (editBtn) editBtn.focus();
+    }
+  }
+
+  function deleteNote(id) {
+    var idx = -1;
+    for (var i = 0; i < state.notes.length; i++) if (state.notes[i].id === id) idx = i;
+    if (idx < 0) return;
+    var note = state.notes[idx];
+    if (!window.confirm('‘' + formatNoteDate(note.date) + (note.title ? ' · ' + note.title : '') + '’ 메모를 삭제할까요?')) return;
+    state.notes.splice(idx, 1);
+    if (ui.noteForm === id) ui.noteForm = null;
+    commit();
+    showToast('진료 메모를 삭제했습니다.', function () {
+      state.notes.splice(Math.min(idx, state.notes.length), 0, note);
+      commit();
+      showToast('삭제를 취소했습니다.');
+    });
   }
 
   /* ---------- toast / undo ---------- */
@@ -660,6 +823,13 @@
     }
     saveState();
     refreshProgress();
+    var qtyBtn = $('.item__qty', rowEl);
+    if (qtyBtn) {
+      var label = qtyLabel(it);
+      qtyBtn.textContent = label || '미입력';
+      qtyBtn.classList.toggle('item__qty--empty', !label);
+      qtyBtn.setAttribute('aria-label', it.name + ' 필요 수량 ' + (label || '미입력') + ', 누르면 수정');
+    }
   }
 
   /* ---------- backup ---------- */
@@ -668,7 +838,8 @@
       version: DATA_VERSION,
       exportedAt: new Date().toISOString(),
       categories: state.categories,
-      items: state.items
+      items: state.items,
+      notes: state.notes
     }, null, 2);
     var blob = new Blob([payload], { type: 'application/json' });
     var url = URL.createObjectURL(blob);
@@ -717,6 +888,7 @@
 
     $('#edit-mode-toggle').addEventListener('click', function () {
       ui.editMode = !ui.editMode;
+      ui.qtyEdit = null;
       render();
     });
 
@@ -759,6 +931,35 @@
     });
     $('#toast-close').addEventListener('click', hideToast);
 
+    var notesRoot = $('#notes');
+    $('#add-note-btn').addEventListener('click', function () {
+      ui.noteForm = 'new';
+      renderNotes();
+      var ta = document.querySelector('[data-focus-key="note-body:new"]');
+      if (ta) ta.focus();
+    });
+    notesRoot.addEventListener('submit', function (e) {
+      var form = e.target.closest('form[data-note-form]');
+      if (!form) return;
+      e.preventDefault();
+      submitNoteForm(form);
+    });
+    notesRoot.addEventListener('click', function (e) {
+      var btn = e.target.closest('button[data-action]');
+      if (!btn) return;
+      var li = btn.closest('[data-note-id]');
+      switch (btn.dataset.action) {
+        case 'cancel-note':
+          ui.noteForm = null;
+          renderNotes();
+          var back = li ? document.querySelector('[data-focus-key="note-edit:' + li.dataset.noteId + '"]') : $('#add-note-btn');
+          if (back) back.focus();
+          break;
+        case 'edit-note': ui.noteForm = li.dataset.noteId; renderNotes(); var ta = document.querySelector('[data-focus-key="note-body:' + li.dataset.noteId + '"]'); if (ta) ta.focus(); break;
+        case 'delete-note': deleteNote(li.dataset.noteId); break;
+      }
+    });
+
     var root = $('#categories');
 
     root.addEventListener('click', function (e) {
@@ -772,6 +973,22 @@
         case 'pick-icon': setCategoryIcon(card.dataset.categoryId, btn.dataset.icon || ''); break;
         case 'delete-item': deleteItem(row.dataset.itemId); break;
         case 'toggle-excluded': toggleExcluded(row.dataset.itemId); break;
+        case 'edit-qty': {
+          var iid = row.dataset.itemId;
+          ui.qtyEdit = ui.qtyEdit === iid ? null : iid;
+          render();
+          var target = document.querySelector('[data-focus-key="' + (ui.qtyEdit ? 'q-qty:' : 'qty-btn:') + iid + '"]');
+          if (target) { target.focus(); if (ui.qtyEdit && target.select) target.select(); }
+          break;
+        }
+        case 'close-qty': {
+          var cid2 = row.dataset.itemId;
+          ui.qtyEdit = null;
+          render();
+          var back = document.querySelector('[data-focus-key="qty-btn:' + cid2 + '"]');
+          if (back) back.focus();
+          break;
+        }
       }
     });
 
@@ -803,6 +1020,15 @@
       if (e.key === 'Enter' && e.target.matches('input[data-field], input[data-action="rename-category"], input[data-action="set-icon"]')) {
         e.preventDefault();
         e.target.blur();
+        var qrow = e.target.closest('.is-qty-editing');
+        if (qrow) {
+          var doneBtn = $('[data-action="close-qty"]', qrow);
+          if (doneBtn) doneBtn.click();
+        }
+      }
+      if (e.key === 'Escape' && e.target.closest('.is-qty-editing')) {
+        var esc = $('[data-action="close-qty"]', e.target.closest('.is-qty-editing'));
+        if (esc) esc.click();
       }
     });
   }
