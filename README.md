@@ -40,7 +40,7 @@ python -m http.server 8000
 
 ## 3. 저장 방식과 제한
 
-- 모든 변경(체크, 수량, 단위, 메모, 분류, 제외 상태 등)은 **현재 기기의 브라우저 localStorage**에 자동 저장됩니다. 저장 키는 `birth-bag-checklist`이며 데이터에 버전 번호(`version`)가 포함됩니다.
+- 모든 변경(체크, 수량, 단위, 메모, 분류, 제외 상태 등)은 **현재 기기의 브라우저 localStorage**에 자동 저장됩니다. 가족 공유(4-1)를 설정하면 여기에 더해 Firebase에도 저장되어 기기 간에 함께 바뀝니다. 저장 키는 `birth-bag-checklist`이며 데이터에 버전 번호(`version`)가 포함됩니다.
 - 새로고침·브라우저 재실행 시 저장된 기록을 복원합니다. 기본 목록은 최초 접속 시에만 채워지며, 사용자가 수정한 목록을 기본값으로 덮어쓰지 않습니다.
 - **제한 사항**
   - 다른 기기·다른 브라우저와 자동으로 동기화되지 않습니다.
@@ -79,6 +79,50 @@ python -m http.server 8000
 }
 ```
 
+## 4-1. 가족 공유(동기화) 설정 — Firebase
+
+기본 상태에서는 기록이 기기마다 따로 저장됩니다. 아래 설정을 하면 **공유 링크**를 연 기기끼리 실시간으로 같은 목록을 씁니다(로그인 없음, 무료 플랜).
+
+1. https://console.firebase.google.com 에서 프로젝트를 만듭니다(구글 애널리틱스는 꺼도 됩니다).
+2. 왼쪽 **빌드 → Realtime Database → 데이터베이스 만들기**. 위치는 가까운 곳(예: asia-southeast1), 보안 규칙은 잠금 모드로 시작해도 됩니다(아래 규칙으로 바꿀 것).
+3. **규칙** 탭에 아래 내용을 붙여넣고 **게시**합니다. 방 ID(20자 이상 무작위 문자열)를 아는 사람만 그 방을 읽고 쓸 수 있고, 목록 전체를 훑어볼 수는 없습니다.
+
+```json
+{
+  "rules": {
+    "rooms": {
+      "$room": {
+        ".read": "$room.matches(/^[a-z0-9]{20,40}$/)",
+        ".write": "$room.matches(/^[a-z0-9]{20,40}$/)"
+      }
+    }
+  }
+}
+```
+
+4. **프로젝트 설정(톱니바퀴) → 일반 → 내 앱 → 웹 앱 추가**(`</>` 아이콘). 호스팅은 체크하지 않습니다. 화면에 나오는 `firebaseConfig` 값을 이 저장소의 `firebase-config.js`에 붙여넣습니다.
+
+```js
+window.FIREBASE_CONFIG = {
+  apiKey: "…", authDomain: "…", databaseURL: "https://…firebasedatabase.app",
+  projectId: "…", storageBucket: "…", messagingSenderId: "…", appId: "…"
+};
+```
+
+5. 커밋·push(또는 `deploy.cmd`)로 배포합니다.
+
+**사용 방법**
+
+- 사이트 상단 **가족 공유 → 공유 링크 만들기**를 누르면 이 기기의 목록이 서버에 올라가고 링크가 만들어집니다.
+- 그 링크를 가족 휴대폰에 보내 열면 바로 연결됩니다. 이후 어느 기기에서 바꾸든 몇 초 안에 서로 반영됩니다.
+- 이미 목록이 있는 기기에서 링크를 열면 "링크의 목록으로 교체할까요?"를 물어봅니다. 취소하면 참여하지 않습니다.
+- 인터넷이 끊겨도 기기에 저장되고, 연결되면 자동으로 올라갑니다. 상단의 상태 표시(가족 공유 중 / 오프라인 / 동기화 오류)로 확인할 수 있습니다.
+- **가족 공유 → 이 기기에서 공유 끊기**로 연결을 해제할 수 있습니다. 서버의 목록은 남습니다.
+
+**주의**: 링크를 아는 사람은 누구나 읽고 쓸 수 있습니다. 진료 메모 등 민감한 내용이 구글 클라우드(Firebase)에 저장되므로 링크는 가족에게만 보내세요.
+
+로컬 개발 시 `http://localhost:포트/checklist/?sync=mock` 으로 열면 Firebase 없이 브라우저 저장소를 가짜 서버로 써서 탭 간 동기화를 시험할 수 있습니다.
+
 ## 5. GitHub Pages 배포 절차
 
 이 저장소는 루트에 `index.html`이 있으므로 기본 설정으로 배포할 수 있습니다. 모든 리소스 경로가 상대 경로(`./style.css`, `./app.js`)이므로 `/checklist/` 하위 경로에서도 정상 로드됩니다. `.nojekyll` 파일이 있어 Jekyll 처리를 건너뜁니다.
@@ -110,6 +154,8 @@ git push origin main
 index.html   화면 구조
 style.css    스타일 (화이트·크림 배경, 피치 포인트, 반응형 3열/1열)
 app.js       상태 관리, localStorage 저장, 렌더링, 백업
+sync.js      가족 공유 동기화 (Firebase Realtime Database)
+firebase-config.js  Firebase 설정값 (비어 있으면 공유 기능 꺼짐)
 deploy.cmd   더블클릭으로 커밋·push(재배포) — Windows 전용
 .nojekyll    GitHub Pages에서 Jekyll 처리 생략
 ```

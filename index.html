@@ -16,10 +16,12 @@
       <div class="app-header__title">
         <h1 class="app-title">내여보💜 출산가방 체크리스트</h1>
         <p class="save-status" id="save-status" role="status" aria-live="polite"></p>
+        <p class="sync-status" id="sync-status" role="status" aria-live="polite" hidden></p>
       </div>
       <div class="toolbar__actions">
         <button type="button" class="btn btn--toggle toolbar__edit-desktop" id="edit-mode-toggle" data-edit-toggle="long" aria-pressed="false">편집 모드</button>
         <button type="button" class="btn btn--primary" id="add-category-btn">분류 추가</button>
+        <button type="button" class="btn" id="share-btn">가족 공유</button>
         <details class="menu" id="backup-menu">
           <summary class="btn">백업</summary>
           <div class="menu__panel">
@@ -81,6 +83,14 @@
     <button type="button" class="btn" id="add-category-cancel">취소</button>
   </form>
 
+  <section class="share" id="share-panel" aria-labelledby="share-title" hidden>
+    <div class="share__head">
+      <h2 id="share-title" class="share__title">👨‍👩‍👧 가족 공유</h2>
+      <button type="button" class="btn btn--small" id="share-close">닫기</button>
+    </div>
+    <div id="share-body"></div>
+  </section>
+
   <form class="paste-import" id="paste-import" hidden>
     <label for="paste-import-text" class="paste-import__label">다른 기기에서 복사한 백업 텍스트를 붙여넣으세요</label>
     <textarea id="paste-import-text" rows="4" placeholder='{"version":1,"categories":[...],"items":[...]}' spellcheck="false"></textarea>
@@ -114,6 +124,8 @@
     <button type="button" class="toast__close" id="toast-close" aria-label="알림 닫기">×</button>
   </div>
 
+  <script src="./firebase-config.js"></script>
   <script src="./app.js"></script>
+  <script src="./sync.js"></script>
 </body>
 </html>

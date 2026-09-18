@@ -210,14 +210,23 @@
     try { window.localStorage.setItem(STORAGE_KEY + ':corrupt-' + Date.now(), raw); } catch (e) { /* ignore */ }
   }
 
-  function saveState() {
+  var changeListeners = [];
+  var applyingRemote = false;
+  var touched = false; // true once the user changed anything on this device
+
+  function saveState(opts) {
+    opts = opts || {};
     var statusEl = $('#save-status');
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       storageOk = true;
-      statusEl.textContent = '자동 저장됨 ' + timeStamp();
+      statusEl.textContent = (opts.remote ? '동기화됨 ' : '자동 저장됨 ') + timeStamp();
       statusEl.classList.remove('is-error');
       hideStorageWarning();
+      if (!opts.silent && !applyingRemote) {
+        if (!opts.initial) touched = true;
+        changeListeners.forEach(function (cb) { try { cb(state); } catch (e) { /* listener errors must not break saving */ } });
+      }
       return true;
     } catch (e) {
       storageOk = false;
@@ -1033,6 +1042,154 @@
     reader.readAsText(file);
   }
 
+  /* ---------- 가족 공유 (sync.js 연동) ---------- */
+  var pendingRemote = null;
+
+  function isTyping() {
+    var el = document.activeElement;
+    if (!el) return false;
+    var tag = el.tagName;
+    if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') return false;
+    if (el.type === 'checkbox' || el.type === 'radio' || el.type === 'file') return false;
+    return true;
+  }
+
+  function applyRemote(remoteState) {
+    var result = normalizeState(remoteState);
+    if (!result.ok) return false;
+    if (JSON.stringify(result.data) === JSON.stringify(state)) return false;
+    if (isTyping()) { pendingRemote = remoteState; return false; } // apply after the field is left
+    pendingRemote = null;
+    applyingRemote = true;
+    try {
+      state = result.data;
+      // keep UI editors pointing at things that still exist
+      if (ui.itemEdit && !findItem(ui.itemEdit)) ui.itemEdit = null;
+      if (ui.qtyEdit && !findItem(ui.qtyEdit)) ui.qtyEdit = null;
+      if (ui.noteForm && ui.noteForm !== 'new') {
+        var still = state.notes.some(function (n) { return n.id === ui.noteForm; });
+        if (!still) ui.noteForm = null;
+      }
+      saveState({ remote: true });
+      render();
+    } finally {
+      applyingRemote = false;
+    }
+    return true;
+  }
+
+  document.addEventListener('focusout', function () {
+    if (!pendingRemote) return;
+    setTimeout(function () { if (pendingRemote && !isTyping()) applyRemote(pendingRemote); }, 0);
+  });
+
+  window.ChecklistApp = {
+    getState: function () { return JSON.parse(JSON.stringify(state)); },
+    normalize: function (raw) { var r = normalizeState(raw); return r.ok ? r.data : null; },
+    isPristine: function () { return !touched; },
+    applyRemote: applyRemote,
+    onChange: function (cb) { changeListeners.push(cb); }
+  };
+
+  function syncStatusText(st) {
+    switch (st.status) {
+      case 'unconfigured': return '';
+      case 'off': return '';
+      case 'connecting': return '연결 중…';
+      case 'online': return '가족 공유 중';
+      case 'offline': return '오프라인 (연결되면 동기화)';
+      case 'error': return '동기화 오류';
+      default: return '';
+    }
+  }
+
+  function renderSharePanel() {
+    var panel = $('#share-panel');
+    var body = $('#share-body');
+    var badge = $('#sync-status');
+    var S = window.ChecklistSync;
+    var st = S ? S.getState() : { configured: false, status: 'unconfigured', roomId: null, link: '' };
+    badge.textContent = syncStatusText(st);
+    badge.className = 'sync-status' + (st.status === 'online' ? ' is-online' : st.status === 'error' ? ' is-error' : st.status === 'offline' ? ' is-offline' : '');
+    badge.hidden = !badge.textContent;
+    if (panel.hidden) return;
+    var html = '';
+    if (!st.configured) {
+      html += '<p class="share__text">가족 공유를 쓰려면 사이트에 Firebase 설정이 필요합니다. 아직 설정되어 있지 않아 기록은 이 기기에만 저장됩니다.</p>';
+      html += '<p class="share__text">설정 방법은 README의 ‘가족 공유(동기화) 설정’을 참고하세요.</p>';
+    } else if (st.roomId) {
+      html += '<p class="share__text">이 기기는 아래 링크와 연결되어 있습니다. 같은 링크를 연 기기끼리 체크리스트·진료 메모·꼭 기억하기가 실시간으로 함께 바뀝니다.</p>';
+      html += '<div class="share__linkrow"><label class="visually-hidden" for="share-link">공유 링크</label><input type="text" id="share-link" readonly value="' + escapeHtml(st.link) + '"><button type="button" class="btn btn--small" data-action="copy-link">링크 복사</button></div>';
+      html += '<p class="share__status">상태: ' + escapeHtml(syncStatusText(st) || '대기') + (st.detail ? ' · ' + escapeHtml(st.detail) : '') + (st.lastSyncedAt ? ' · 마지막 동기화 ' + escapeHtml(timeStampOf(st.lastSyncedAt)) : '') + '</p>';
+      html += '<p class="share__text share__text--muted">링크를 아는 사람은 누구나 볼 수 있으니 가족에게만 보내세요. 카카오톡 등으로 보내고 받은 기기에서 링크를 열면 바로 연결됩니다.</p>';
+      html += '<div class="note-form__actions"><button type="button" class="btn btn--small btn--danger" data-action="leave-room">이 기기에서 공유 끊기</button></div>';
+    } else {
+      html += '<p class="share__text">공유 링크를 만들면 지금 이 기기의 목록이 서버에 올라가고, 그 링크를 연 다른 기기와 실시간으로 함께 바뀝니다. 로그인은 필요 없습니다.</p>';
+      html += '<div class="note-form__actions"><button type="button" class="btn btn--primary btn--small" data-action="create-room">공유 링크 만들기</button></div>';
+      html += '<p class="share__text" style="margin-top:10px">이미 받은 링크가 있다면 여기에 붙여넣으세요.</p>';
+      html += '<form class="share__linkrow" data-action="join-room"><label class="visually-hidden" for="join-link">받은 공유 링크</label><input type="text" id="join-link" placeholder="https://…/checklist/?room=…" autocomplete="off"><button type="submit" class="btn btn--small">참여</button></form>';
+      if (st.status === 'error' && st.detail) html += '<p class="field-error">' + escapeHtml(st.detail) + '</p>';
+      if (st.status === 'connecting') html += '<p class="share__status">연결 중…</p>';
+    }
+    body.innerHTML = html;
+  }
+
+  function timeStampOf(d) {
+    var p = function (n) { return (n < 10 ? '0' : '') + n; };
+    return p(d.getHours()) + ':' + p(d.getMinutes());
+  }
+
+  function bindShareEvents() {
+    $('#share-btn').addEventListener('click', function () {
+      var panel = $('#share-panel');
+      panel.hidden = !panel.hidden;
+      if (!panel.hidden) {
+        $('#add-category-form').hidden = true;
+        $('#paste-import').hidden = true;
+        renderSharePanel();
+        panel.scrollIntoView({ block: 'nearest' });
+      }
+    });
+    $('#share-close').addEventListener('click', function () { $('#share-panel').hidden = true; $('#share-btn').focus(); });
+    $('#share-panel').addEventListener('click', function (e) {
+      var btn = e.target.closest('[data-action]');
+      if (!btn || btn.tagName !== 'BUTTON') return;
+      var S = window.ChecklistSync;
+      switch (btn.dataset.action) {
+        case 'create-room':
+          S.createRoom().then(function () { showToast('공유 링크를 만들었습니다. 링크를 복사해 가족에게 보내세요.'); }, function () { /* status shows the error */ });
+          break;
+        case 'copy-link': {
+          var linkEl = $('#share-link');
+          var text = linkEl.value;
+          var done = function () { showToast('공유 링크를 복사했습니다.'); };
+          var fail = function () { linkEl.focus(); linkEl.select(); showToast('자동 복사가 막혀 있습니다. 링크를 직접 선택해 복사하세요.'); };
+          if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, fail); else fail();
+          break;
+        }
+        case 'leave-room':
+          if (window.confirm('이 기기에서 공유를 끊을까요? 서버의 목록은 그대로 남고, 이 기기는 지금 내용을 따로 저장합니다.')) {
+            S.leaveRoom();
+            showToast('공유를 끊었습니다. 이 기기 기록은 그대로 유지됩니다.');
+          }
+          break;
+      }
+    });
+    $('#share-panel').addEventListener('submit', function (e) {
+      var form = e.target.closest('form[data-action="join-room"]');
+      if (!form) return;
+      e.preventDefault();
+      var S = window.ChecklistSync;
+      var id = S.extractRoomId($('#join-link').value);
+      if (!id) { showToast('올바른 공유 링크가 아닙니다.'); return; }
+      S.joinRoom(id).then(function (joined) {
+        if (joined) showToast('공유 링크에 참여했습니다.');
+      }, function () { /* status shows the error */ });
+    });
+    if (window.ChecklistSync) window.ChecklistSync.onStatus(function () { renderSharePanel(); });
+    renderSharePanel();
+  }
+
   /* ---------- event wiring ---------- */
   function bindEvents() {
     $('#filter-group').addEventListener('change', function (e) {
@@ -1292,11 +1449,14 @@
     loadUiPrefs();
     bindEvents();
     if (loaded.fresh && storageOk) {
-      saveState();
+      saveState({ initial: true });
     } else if (!loaded.fresh) {
+      touched = true;
       $('#save-status').textContent = '저장된 기록을 불러왔습니다';
     }
     render();
+    // sync.js is loaded after app.js; bind once it has had a chance to run.
+    window.addEventListener('load', bindShareEvents);
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

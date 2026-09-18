@@ -71,6 +71,24 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 .save-status { margin: 0; font-size: 0.8rem; color: var(--muted); }
 .save-status.is-error { color: var(--danger); font-weight: 600; }
+.sync-status { margin: 0; font-size: 0.8rem; color: var(--muted); }
+.sync-status::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); margin-right: 5px; vertical-align: 1px; }
+.sync-status.is-online { color: var(--success); }
+.sync-status.is-online::before { background: var(--success); }
+.sync-status.is-offline { color: #a06a00; }
+.sync-status.is-offline::before { background: #e0a100; }
+.sync-status.is-error { color: var(--danger); font-weight: 600; }
+.sync-status.is-error::before { background: var(--danger); }
+
+.share { margin-top: 10px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; }
+.share__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.share__title { font-size: 1rem; margin: 0; }
+.share__text { margin: 8px 0 0; font-size: 0.9rem; }
+.share__text--muted { color: var(--muted); font-size: 0.82rem; }
+.share__status { margin: 8px 0 0; font-size: 0.85rem; color: var(--muted); }
+.share__linkrow { display: flex; gap: 6px; margin-top: 8px; align-items: center; }
+.share__linkrow input { min-height: 40px; font-size: 0.85rem; }
+.share__linkrow .btn { flex-shrink: 0; }
 
 .progress-card {
   background: var(--card);
@@ -464,7 +482,7 @@ input[type="date"] {
   .toolbar { gap: 6px 8px; }
   .filter-option { flex: 1; }
   .filter-option span { width: 100%; padding: 0 4px; }
-  .toolbar__actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; flex-basis: 100%; }
+  .toolbar__actions { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; flex-basis: 100%; }
   .toolbar__actions .btn { width: 100%; padding: 0 6px; }
   .menu__panel { left: auto; right: 0; width: max-content; max-width: calc(100vw - 24px); }
   .item__actions .field { flex-basis: 100%; }
