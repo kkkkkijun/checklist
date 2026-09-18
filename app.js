@@ -7,11 +7,24 @@
   var DATA_VERSION = 1;
   var UNIT_PRESETS = ['개', '벌', '팩', '장', '쌍', '세트'];
   var UNDO_MS = 8000;
+  var ICON_PRESETS = ['👶', '🤱', '🧳', '🍼', '🧸', '🏥', '🎒', '🧴', '👕', '📄', '✨'];
+  var ICON_MAX = 16; // UTF-16 code units; enough for one multi-codepoint emoji
+
+  function defaultIconFor(name) {
+    for (var i = 0; i < DEFAULT_TEMPLATE.length; i++) {
+      if (DEFAULT_TEMPLATE[i].name === name) return DEFAULT_TEMPLATE[i].icon;
+    }
+    return '';
+  }
+
+  function cleanIcon(value) {
+    return String(value == null ? '' : value).replace(/\s+/g, '').slice(0, ICON_MAX);
+  }
 
   var DEFAULT_TEMPLATE = [
-    { name: '아기 용품', items: ['젖병', '젖꼭지', '젖병 세정 도구', '아기 손수건', '아기 배냇저고리', '속싸개', '겉싸개', '손싸개', '발싸개', '아기 모자', '아기 양말', '기저귀 발진 크림', '체온계', '바구니 카시트', '아기 세탁세제', '아기 물티슈', '아기 면봉', '아기 보습 제품', '아기 기저귀'] },
-    { name: '산모 용품', items: ['산모 수첩', '신분증', '손목 보호대', '발목 보호대', '돌돌이 양말', '임산부 레깅스', '가디건', '압박 스타킹', '유축기', '유축기 깔때기', '초유 저장팩', '수유 패드', '수유 브라 또는 나시', '산모 패드', '산모 팬티', '입는 생리대', '생리대 오버나이트 또는 대형', '유두 보호 크림', '튼살 크림', '철분제 및 기타 영양제', '슬리퍼', '굽은 빨대', '텀블러 또는 종이컵', '비데 물티슈'] },
-    { name: '기타', items: ['노트북', '충전기', '태블릿', '수건', '무형광 세탁망', '각티슈', '물티슈', '세면도구', '양치도구', '기초 화장품', '네임펜', '메모지', '가위', '여분 지퍼백', '머리끈 또는 머리띠', '손톱깎이', '멀티탭', '보호자 의류', '보호자 침구'] }
+    { name: '아기 용품', icon: '👶', items: ['젖병', '젖꼭지', '젖병 세정 도구', '아기 손수건', '아기 배냇저고리', '속싸개', '겉싸개', '손싸개', '발싸개', '아기 모자', '아기 양말', '기저귀 발진 크림', '체온계', '바구니 카시트', '아기 세탁세제', '아기 물티슈', '아기 면봉', '아기 보습 제품', '아기 기저귀'] },
+    { name: '산모 용품', icon: '🤱', items: ['산모 수첩', '신분증', '손목 보호대', '발목 보호대', '돌돌이 양말', '임산부 레깅스', '가디건', '압박 스타킹', '유축기', '유축기 깔때기', '초유 저장팩', '수유 패드', '수유 브라 또는 나시', '산모 패드', '산모 팬티', '입는 생리대', '생리대 오버나이트 또는 대형', '유두 보호 크림', '튼살 크림', '철분제 및 기타 영양제', '슬리퍼', '굽은 빨대', '텀블러 또는 종이컵', '비데 물티슈'] },
+    { name: '기타', icon: '🧳', items: ['노트북', '충전기', '태블릿', '수건', '무형광 세탁망', '각티슈', '물티슈', '세면도구', '양치도구', '기초 화장품', '네임펜', '메모지', '가위', '여분 지퍼백', '머리끈 또는 머리띠', '손톱깎이', '멀티탭', '보호자 의류', '보호자 침구'] }
   ];
 
   /* ---------- utilities ---------- */
@@ -56,7 +69,7 @@
     var items = [];
     DEFAULT_TEMPLATE.forEach(function (cat) {
       var cid = uid();
-      categories.push({ id: cid, name: cat.name });
+      categories.push({ id: cid, name: cat.name, icon: cat.icon });
       cat.items.forEach(function (name) {
         items.push({ id: uid(), categoryId: cid, name: name, qty: null, unit: '', memo: '', done: false, excluded: false });
       });
@@ -73,6 +86,7 @@
 
     var seen = {};
     var categories = [];
+    var migrated = false;
     for (var i = 0; i < raw.categories.length; i++) {
       var c = raw.categories[i];
       if (!c || typeof c !== 'object') return { ok: false, error: (i + 1) + '번째 분류가 올바르지 않습니다.' };
@@ -82,7 +96,11 @@
       if (!cname) return { ok: false, error: (i + 1) + '번째 분류 이름이 비어 있습니다.' };
       if (seen[cid]) return { ok: false, error: '분류 ID가 중복되었습니다: ' + cid };
       seen[cid] = true;
-      categories.push({ id: cid, name: cname.slice(0, 40) });
+      // icon is optional; data saved before icons existed gets the template icon for default names
+      var icon = '';
+      if (c.icon === undefined) { icon = defaultIconFor(cname); if (icon) migrated = true; }
+      else if (typeof c.icon === 'string') icon = cleanIcon(c.icon);
+      categories.push({ id: cid, name: cname.slice(0, 40), icon: icon });
     }
 
     var items = [];
@@ -114,7 +132,7 @@
         excluded: it.excluded === true
       });
     }
-    return { ok: true, data: { version: DATA_VERSION, categories: categories, items: items } };
+    return { ok: true, migrated: migrated, data: { version: DATA_VERSION, categories: categories, items: items } };
   }
 
   /* ---------- storage ---------- */
@@ -144,6 +162,10 @@
       backupCorrupt(raw);
       showStorageWarning('저장된 기록이 손상되어 기본 목록으로 시작합니다. (' + result.error + ')', 'load');
       return { state: createDefaultState(), fresh: true };
+    }
+    if (result.migrated) {
+      // persist filled-in defaults quietly; a failure here is reported on the next normal save
+      try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(result.data)); } catch (e) { /* ignore */ }
     }
     return { state: result.data, fresh: false };
   }
@@ -329,13 +351,21 @@
     var html = '<section class="category' + (collapsed ? ' is-collapsed' : '') + '" data-category-id="' + escapeHtml(cat.id) + '" aria-labelledby="' + titleId + '">';
     html += '<div class="category__head">';
     if (ui.editMode) {
+      html += '<label class="visually-hidden" for="cat-icon-' + escapeHtml(cat.id) + '">분류 아이콘</label>';
+      html += '<input type="text" class="category__icon-input" id="cat-icon-' + escapeHtml(cat.id) + '" data-action="set-icon" data-focus-key="cat-icon:' + escapeHtml(cat.id) + '" value="' + escapeHtml(cat.icon || '') + '" maxlength="' + ICON_MAX + '" placeholder="아이콘" autocomplete="off">';
       html += '<label class="visually-hidden" for="cat-name-' + escapeHtml(cat.id) + '">분류 이름</label>';
       html += '<input type="text" class="category__title-input" id="cat-name-' + escapeHtml(cat.id) + '" data-action="rename-category" data-focus-key="cat-name:' + escapeHtml(cat.id) + '" value="' + escapeHtml(cat.name) + '" maxlength="40" aria-labelledby="' + titleId + '">';
       html += '<h2 id="' + titleId + '" class="visually-hidden">' + escapeHtml(cat.name) + '</h2>';
       html += '<button type="button" class="btn btn--small btn--danger" data-action="delete-category" data-focus-key="cat-del:' + escapeHtml(cat.id) + '" aria-label="분류 ' + escapeHtml(cat.name) + ' 삭제">삭제</button>';
+      html += '</div><div class="icon-presets" role="group" aria-label="' + escapeHtml(cat.name) + ' 아이콘 선택">';
+      ICON_PRESETS.forEach(function (ic) {
+        html += '<button type="button" class="icon-presets__btn' + (cat.icon === ic ? ' is-active' : '') + '" data-action="pick-icon" data-icon="' + escapeHtml(ic) + '" aria-label="아이콘 ' + escapeHtml(ic) + '" aria-pressed="' + (cat.icon === ic ? 'true' : 'false') + '">' + escapeHtml(ic) + '</button>';
+      });
+      html += '<button type="button" class="icon-presets__btn icon-presets__btn--none' + (!cat.icon ? ' is-active' : '') + '" data-action="pick-icon" data-icon="" aria-pressed="' + (!cat.icon ? 'true' : 'false') + '">없음</button>';
     } else {
       html += '<h2 id="' + titleId + '" class="category__title">';
       html += '<button type="button" class="category__toggle" data-action="toggle-collapse" data-focus-key="cat-toggle:' + escapeHtml(cat.id) + '" aria-expanded="' + (collapsed ? 'false' : 'true') + '" aria-controls="' + bodyId + '">';
+      if (cat.icon) html += '<span class="category__icon" aria-hidden="true">' + escapeHtml(cat.icon) + '</span>';
       html += '<span class="category__name">' + escapeHtml(cat.name) + '</span>';
       html += '<span class="category__chevron" aria-hidden="true"></span>';
       html += '<span class="visually-hidden">' + (collapsed ? ' 펼치기' : ' 접기') + '</span>';
@@ -459,7 +489,7 @@
   function addCategory(name) {
     var n = String(name || '').trim();
     if (!n) { showToast('분류 이름을 입력하세요.'); return false; }
-    state.categories.push({ id: uid(), name: n.slice(0, 40) });
+    state.categories.push({ id: uid(), name: n.slice(0, 40), icon: '' });
     commit();
     return true;
   }
@@ -491,6 +521,25 @@
       opt.textContent = cat.name + (opt.selected ? ' (현재)' : '');
     });
     showToast('분류 이름을 ‘' + cat.name + '’(으)로 변경했습니다.');
+  }
+
+  function setCategoryIcon(id, value) {
+    var cat = findCategory(id);
+    if (!cat) return;
+    var icon = cleanIcon(value);
+    if (icon === (cat.icon || '')) return;
+    cat.icon = icon;
+    saveState();
+    // Keep the input and preset buttons in sync without a full re-render (focus stays put).
+    var card = document.querySelector('[data-category-id="' + id + '"]');
+    if (!card) return;
+    var input = $('[data-action="set-icon"]', card);
+    if (input && input.value !== icon) input.value = icon;
+    Array.prototype.forEach.call(card.querySelectorAll('[data-action="pick-icon"]'), function (b) {
+      var active = (b.dataset.icon || '') === icon;
+      b.classList.toggle('is-active', active);
+      b.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
   }
 
   function deleteCategory(id) {
@@ -720,6 +769,7 @@
       switch (btn.dataset.action) {
         case 'delete-category': deleteCategory(card.dataset.categoryId); break;
         case 'toggle-collapse': toggleCollapsed(card.dataset.categoryId); break;
+        case 'pick-icon': setCategoryIcon(card.dataset.categoryId, btn.dataset.icon || ''); break;
         case 'delete-item': deleteItem(row.dataset.itemId); break;
         case 'toggle-excluded': toggleExcluded(row.dataset.itemId); break;
       }
@@ -744,12 +794,13 @@
       if (el.dataset.action === 'toggle-done') { toggleDone(row.dataset.itemId, el.checked); return; }
       if (el.dataset.action === 'move-item') { moveItem(row.dataset.itemId, el.value); return; }
       if (el.dataset.action === 'rename-category') { renameCategory(card.dataset.categoryId, el.value, el); return; }
+      if (el.dataset.action === 'set-icon') { setCategoryIcon(card.dataset.categoryId, el.value); return; }
       if (el.dataset.field && row) { updateItemField(row.dataset.itemId, el.dataset.field, el, row); }
     });
 
     // Enter in an edit field should commit and not submit anything.
     root.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter' && e.target.matches('input[data-field], input[data-action="rename-category"]')) {
+      if (e.key === 'Enter' && e.target.matches('input[data-field], input[data-action="rename-category"], input[data-action="set-icon"]')) {
         e.preventDefault();
         e.target.blur();
       }

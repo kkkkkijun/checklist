@@ -225,6 +225,18 @@ input[type="number"] { -moz-appearance: textfield; }
 }
 .category__toggle[aria-expanded="false"] .category__chevron { transform: rotate(-45deg); margin-bottom: 0; }
 .category__title-input { flex: 1; font-weight: 700; }
+.category__icon { flex-shrink: 0; font-size: 1.25em; line-height: 1; margin-right: 6px; }
+.category__toggle .category__name { flex: 1; }
+.category__icon-input { flex: 0 0 64px; text-align: center; padding: 8px 4px; font-size: 1.1rem; }
+.icon-presets { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.icon-presets__btn {
+  min-width: 38px; min-height: 38px; padding: 0 8px;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--card);
+  font-size: 1.15rem; line-height: 1; cursor: pointer;
+}
+.icon-presets__btn--none { font-size: 0.82rem; color: var(--muted); }
+.icon-presets__btn:hover { background: var(--peach-soft); }
+.icon-presets__btn.is-active { border-color: var(--peach-strong); background: var(--peach-soft); box-shadow: inset 0 0 0 1px var(--peach-strong); }
 .category__progress { margin: 4px 0 8px; }
 .category__progress .progress-text { font-size: 0.85rem; margin-bottom: 5px; }
 .category__progress .progress-bar { height: 8px; }
