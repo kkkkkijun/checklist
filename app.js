@@ -241,15 +241,37 @@
 
   /* ---------- state ---------- */
   var state;
-  var ui = { filter: 'all', editMode: false, pendingUndo: null, undoTimer: null, collapsed: {}, noteForm: null, qtyEdit: null, highlightEdit: false };
+  var ui = { filter: 'all', editMode: false, pendingUndo: null, undoTimer: null, collapsed: {}, noteForm: null, qtyEdit: null, highlightEdit: false, activeCategory: null, highlightsCollapsed: false };
+
+  // Active tab (narrow screens): falls back to the first category when the saved one is gone.
+  function activeCategoryId() {
+    if (!state.categories.length) return null;
+    for (var i = 0; i < state.categories.length; i++) if (state.categories[i].id === ui.activeCategory) return ui.activeCategory;
+    return state.categories[0].id;
+  }
+
+  function setActiveCategory(id) {
+    ui.activeCategory = id;
+    ui.qtyEdit = null;
+    saveUiPrefs();
+    render();
+  }
+
+  function toggleHighlightsCollapsed() {
+    ui.highlightsCollapsed = !ui.highlightsCollapsed;
+    saveUiPrefs();
+    renderHighlights();
+  }
 
   function loadUiPrefs() {
     try {
       var raw = window.localStorage.getItem(UI_KEY);
       if (!raw) return;
       var parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === 'object' && parsed.collapsed && typeof parsed.collapsed === 'object') {
-        ui.collapsed = parsed.collapsed;
+      if (parsed && typeof parsed === 'object') {
+        if (parsed.collapsed && typeof parsed.collapsed === 'object') ui.collapsed = parsed.collapsed;
+        if (typeof parsed.activeCategory === 'string') ui.activeCategory = parsed.activeCategory;
+        ui.highlightsCollapsed = parsed.highlightsCollapsed === true;
       }
     } catch (e) { /* UI preferences are optional */ }
   }
@@ -259,7 +281,11 @@
       var keep = {};
       state.categories.forEach(function (c) { if (ui.collapsed[c.id]) keep[c.id] = true; });
       ui.collapsed = keep;
-      window.localStorage.setItem(UI_KEY, JSON.stringify({ collapsed: ui.collapsed }));
+      window.localStorage.setItem(UI_KEY, JSON.stringify({
+        collapsed: ui.collapsed,
+        activeCategory: ui.activeCategory,
+        highlightsCollapsed: ui.highlightsCollapsed
+      }));
     } catch (e) { /* ignore */ }
   }
 
@@ -338,6 +364,7 @@
   function render() {
     var activeKey = focusKeyOf(document.activeElement);
     renderOverall();
+    renderTabs();
     renderCategories();
     renderNotes();
     renderHighlights();
@@ -359,6 +386,7 @@
 
   function refreshProgress() {
     renderOverall();
+    renderTabs();
     state.categories.forEach(function (cat) {
       var card = document.querySelector('[data-category-id="' + cat.id + '"]');
       if (!card) return;
@@ -379,6 +407,22 @@
     root.innerHTML = state.categories.map(renderCategory).join('');
   }
 
+  function renderTabs() {
+    var bar = $('#category-tabs');
+    if (state.categories.length === 0) { bar.innerHTML = ''; bar.hidden = true; return; }
+    bar.hidden = false;
+    var active = activeCategoryId();
+    bar.innerHTML = state.categories.map(function (cat) {
+      var p = computeProgress(itemsOf(cat.id));
+      var isActive = cat.id === active;
+      var count = p.total ? p.done + '/' + p.total : '0';
+      return '<button type="button" role="tab" class="category-tab' + (isActive ? ' is-active' : '') + '" data-action="select-tab" data-category-id="' + escapeHtml(cat.id) + '" data-focus-key="tab:' + escapeHtml(cat.id) + '" aria-selected="' + (isActive ? 'true' : 'false') + '" aria-controls="cat-' + escapeHtml(cat.id) + '" tabindex="' + (isActive ? '0' : '-1') + '">' +
+        (cat.icon ? '<span class="category-tab__icon" aria-hidden="true">' + escapeHtml(cat.icon) + '</span>' : '') +
+        '<span class="category-tab__name">' + escapeHtml(cat.name) + '</span>' +
+        '<span class="category-tab__count">' + escapeHtml(count) + '</span></button>';
+    }).join('');
+  }
+
   function renderCategory(cat) {
     var catItems = itemsOf(cat.id);
     var p = computeProgress(catItems);
@@ -386,7 +430,8 @@
     var titleId = 'cat-title-' + cat.id;
     var collapsed = !ui.editMode && !!ui.collapsed[cat.id];
     var bodyId = 'cat-body-' + cat.id;
-    var html = '<section class="category' + (collapsed ? ' is-collapsed' : '') + '" data-category-id="' + escapeHtml(cat.id) + '" aria-labelledby="' + titleId + '">';
+    var isActive = cat.id === activeCategoryId();
+    var html = '<section class="category' + (collapsed ? ' is-collapsed' : '') + (isActive ? ' is-active' : '') + '" id="cat-' + escapeHtml(cat.id) + '" data-category-id="' + escapeHtml(cat.id) + '" aria-labelledby="' + titleId + '">';
     html += '<div class="category__head">';
     if (ui.editMode) {
       html += '<label class="visually-hidden" for="cat-icon-' + escapeHtml(cat.id) + '">분류 아이콘</label>';
@@ -647,6 +692,13 @@
     var box = $('#highlights-body');
     var lines = state.highlights ? state.highlights.split('\n') : [];
     var editBtn = $('#highlights-edit-btn');
+    var collapsed = ui.highlightsCollapsed && !ui.highlightEdit;
+    var toggle = $('#highlights-toggle');
+    toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    $('#highlights-count').textContent = lines.length ? lines.length + '개' : '';
+    $('#highlights-toggle-label').textContent = collapsed ? '펼치기' : '접기';
+    box.hidden = collapsed;
+    $('#highlights').classList.toggle('is-collapsed', collapsed);
     if (ui.highlightEdit) {
       editBtn.hidden = true;
       box.innerHTML = '<form class="highlights-form" id="highlights-form">' +
@@ -702,7 +754,10 @@
   function addCategory(name) {
     var n = String(name || '').trim();
     if (!n) { showToast('분류 이름을 입력하세요.'); return false; }
-    state.categories.push({ id: uid(), name: n.slice(0, 40), icon: '' });
+    var newId = uid();
+    state.categories.push({ id: newId, name: n.slice(0, 40), icon: '' });
+    ui.activeCategory = newId;
+    saveUiPrefs();
     commit();
     return true;
   }
@@ -982,7 +1037,29 @@
     });
     $('#toast-close').addEventListener('click', hideToast);
 
+    $('#category-tabs').addEventListener('click', function (e) {
+      var tab = e.target.closest('[data-action="select-tab"]');
+      if (!tab) return;
+      setActiveCategory(tab.dataset.categoryId);
+      var again = document.querySelector('[data-focus-key="tab:' + tab.dataset.categoryId + '"]');
+      if (again) again.focus();
+    });
+    $('#category-tabs').addEventListener('keydown', function (e) {
+      if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+      var tabs = Array.prototype.slice.call(document.querySelectorAll('#category-tabs [role="tab"]'));
+      var idx = tabs.indexOf(document.activeElement);
+      if (idx < 0) return;
+      e.preventDefault();
+      var next = tabs[(idx + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
+      setActiveCategory(next.dataset.categoryId);
+      var again = document.querySelector('[data-focus-key="tab:' + next.dataset.categoryId + '"]');
+      if (again) again.focus();
+    });
+
+    $('#highlights-toggle').addEventListener('click', toggleHighlightsCollapsed);
+
     $('#highlights-edit-btn').addEventListener('click', function () {
+      if (ui.highlightsCollapsed) { ui.highlightsCollapsed = false; saveUiPrefs(); }
       ui.highlightEdit = true;
       renderHighlights();
       var ta = $('#highlights-input');

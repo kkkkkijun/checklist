@@ -53,7 +53,13 @@
 
     <section class="highlights" id="highlights" aria-labelledby="highlights-title">
       <div class="highlights__head">
-        <h2 id="highlights-title" class="highlights__title">⭐ 꼭 기억하기</h2>
+        <h2 id="highlights-title" class="highlights__title">
+          <button type="button" class="highlights__toggle" id="highlights-toggle" aria-expanded="true" aria-controls="highlights-body">
+            <span>⭐ 꼭 기억하기 <span class="highlights__count" id="highlights-count"></span></span>
+            <span class="category__chevron" aria-hidden="true"></span>
+            <span class="visually-hidden" id="highlights-toggle-label">접기</span>
+          </button>
+        </h2>
         <button type="button" class="btn btn--small" id="highlights-edit-btn">수정</button>
       </div>
       <div id="highlights-body"></div>
@@ -68,6 +74,7 @@
       <label class="filter-option"><input type="radio" name="filter" value="done"><span>완료</span></label>
       <label class="filter-option"><input type="radio" name="filter" value="excluded"><span>제외</span></label>
     </fieldset>
+    <div class="category-tabs" id="category-tabs" role="tablist" aria-label="분류 선택"></div>
   </div>
 
   <p class="notice notice--warn" id="storage-warning" hidden></p>
