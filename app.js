@@ -3,6 +3,7 @@
   'use strict';
 
   var STORAGE_KEY = 'birth-bag-checklist';
+  var UI_KEY = 'birth-bag-checklist:ui';
   var DATA_VERSION = 1;
   var UNIT_PRESETS = ['개', '벌', '팩', '장', '쌍', '세트'];
   var UNDO_MS = 8000;
@@ -182,7 +183,34 @@
 
   /* ---------- state ---------- */
   var state;
-  var ui = { filter: 'all', editMode: false, pendingUndo: null, undoTimer: null };
+  var ui = { filter: 'all', editMode: false, pendingUndo: null, undoTimer: null, collapsed: {} };
+
+  function loadUiPrefs() {
+    try {
+      var raw = window.localStorage.getItem(UI_KEY);
+      if (!raw) return;
+      var parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object' && parsed.collapsed && typeof parsed.collapsed === 'object') {
+        ui.collapsed = parsed.collapsed;
+      }
+    } catch (e) { /* UI preferences are optional */ }
+  }
+
+  function saveUiPrefs() {
+    try {
+      var keep = {};
+      state.categories.forEach(function (c) { if (ui.collapsed[c.id]) keep[c.id] = true; });
+      ui.collapsed = keep;
+      window.localStorage.setItem(UI_KEY, JSON.stringify({ collapsed: ui.collapsed }));
+    } catch (e) { /* ignore */ }
+  }
+
+  function toggleCollapsed(categoryId) {
+    if (ui.collapsed[categoryId]) delete ui.collapsed[categoryId];
+    else ui.collapsed[categoryId] = true;
+    saveUiPrefs();
+    render();
+  }
 
   function itemsOf(categoryId) {
     return state.items.filter(function (it) { return it.categoryId === categoryId; });
@@ -296,7 +324,9 @@
     var p = computeProgress(catItems);
     var visible = catItems.filter(matchesFilter);
     var titleId = 'cat-title-' + cat.id;
-    var html = '<section class="category" data-category-id="' + escapeHtml(cat.id) + '" aria-labelledby="' + titleId + '">';
+    var collapsed = !ui.editMode && !!ui.collapsed[cat.id];
+    var bodyId = 'cat-body-' + cat.id;
+    var html = '<section class="category' + (collapsed ? ' is-collapsed' : '') + '" data-category-id="' + escapeHtml(cat.id) + '" aria-labelledby="' + titleId + '">';
     html += '<div class="category__head">';
     if (ui.editMode) {
       html += '<label class="visually-hidden" for="cat-name-' + escapeHtml(cat.id) + '">분류 이름</label>';
@@ -304,13 +334,19 @@
       html += '<h2 id="' + titleId + '" class="visually-hidden">' + escapeHtml(cat.name) + '</h2>';
       html += '<button type="button" class="btn btn--small btn--danger" data-action="delete-category" data-focus-key="cat-del:' + escapeHtml(cat.id) + '" aria-label="분류 ' + escapeHtml(cat.name) + ' 삭제">삭제</button>';
     } else {
-      html += '<h2 id="' + titleId + '" class="category__title">' + escapeHtml(cat.name) + '</h2>';
+      html += '<h2 id="' + titleId + '" class="category__title">';
+      html += '<button type="button" class="category__toggle" data-action="toggle-collapse" data-focus-key="cat-toggle:' + escapeHtml(cat.id) + '" aria-expanded="' + (collapsed ? 'false' : 'true') + '" aria-controls="' + bodyId + '">';
+      html += '<span class="category__name">' + escapeHtml(cat.name) + '</span>';
+      html += '<span class="category__chevron" aria-hidden="true"></span>';
+      html += '<span class="visually-hidden">' + (collapsed ? ' 펼치기' : ' 접기') + '</span>';
+      html += '</button></h2>';
     }
     html += '</div>';
 
     html += '<div class="category__progress"><p class="progress-text">' + escapeHtml(progressText(p)) + '</p>';
     html += '<div class="progress-bar" role="progressbar" aria-label="' + escapeHtml(cat.name) + ' 진행률" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + p.percent + '" aria-valuetext="' + escapeHtml(progressText(p)) + '"><div class="progress-bar__fill" style="width:' + p.percent + '%"></div></div></div>';
 
+    html += '<div class="category__body" id="' + bodyId + '"' + (collapsed ? ' hidden' : '') + '>';
     if (visible.length === 0) {
       html += '<p class="items-empty">' + escapeHtml(emptyMessage(catItems)) + '</p>';
     } else {
@@ -322,6 +358,7 @@
     html += '<input type="text" id="new-item-' + escapeHtml(cat.id) + '" data-focus-key="new-item:' + escapeHtml(cat.id) + '" placeholder="준비물 이름" maxlength="60" autocomplete="off">';
     html += '<button type="submit" class="btn">추가</button>';
     html += '</form>';
+    html += '</div>';
     html += '</section>';
     return html;
   }
@@ -682,6 +719,7 @@
       var row = btn.closest('[data-item-id]');
       switch (btn.dataset.action) {
         case 'delete-category': deleteCategory(card.dataset.categoryId); break;
+        case 'toggle-collapse': toggleCollapsed(card.dataset.categoryId); break;
         case 'delete-item': deleteItem(row.dataset.itemId); break;
         case 'toggle-excluded': toggleExcluded(row.dataset.itemId); break;
       }
@@ -722,6 +760,7 @@
   function init() {
     var loaded = loadState();
     state = loaded.state;
+    loadUiPrefs();
     bindEvents();
     if (loaded.fresh && storageOk) {
       saveState();
