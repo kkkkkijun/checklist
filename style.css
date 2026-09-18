@@ -234,8 +234,12 @@ input[type="text"], input[type="number"], select {
 }
 input[type="number"] { -moz-appearance: textfield; }
 
-.inline-form { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
-.inline-form input[type="text"] { flex: 1 1 160px; }
+.inline-form { display: flex; gap: 6px; margin-top: 10px; flex-wrap: nowrap; align-items: center; }
+.inline-form input[type="text"] { flex: 1 1 auto; min-width: 0; min-height: 40px; padding: 6px 12px; font-size: 0.95rem; }
+.inline-form .btn { min-height: 40px; padding: 0 12px; font-size: 0.9rem; flex-shrink: 0; }
+.add-category-form { max-width: 480px; margin: 8px 0 0; }
+.add-category-form input[type="text"] { min-height: 38px; }
+.add-category-form .btn { min-height: 38px; padding: 0 11px; font-size: 0.88rem; }
 
 .notice { margin: 10px 0 0; font-size: 0.82rem; color: var(--muted); line-height: 1.45; }
 .notice--warn { color: var(--danger); font-weight: 600; }
