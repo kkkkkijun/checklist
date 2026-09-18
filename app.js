@@ -10,6 +10,15 @@
   var ICON_PRESETS = ['👶🏻', '🤱🏻', '🧳', '🍼', '🧸', '🏥', '🎒', '🧴', '👕', '📄', '✨'];
   var ICON_MAX = 16; // UTF-16 code units; enough for one multi-codepoint emoji
   var NOTE_MAX = 5000;
+  var HIGHLIGHT_MAX = 2000;
+
+  // One line per point; leading bullet characters are stripped so pasted lists render cleanly.
+  function cleanHighlights(text) {
+    return String(text == null ? '' : text).replace(/\r\n?/g, '\n').split('\n')
+      .map(function (l) { return l.trim().replace(/^[-*\u2022\u00b7]\s*/, ''); })
+      .filter(function (l) { return l; })
+      .join('\n').slice(0, HIGHLIGHT_MAX);
+  }
 
   function defaultIconFor(name) {
     for (var i = 0; i < DEFAULT_TEMPLATE.length; i++) {
@@ -78,7 +87,7 @@
         items.push({ id: uid(), categoryId: cid, name: name, qty: null, unit: '', memo: '', done: false, excluded: false });
       });
     });
-    return { version: DATA_VERSION, categories: categories, items: items, notes: [] };
+    return { version: DATA_VERSION, categories: categories, items: items, notes: [], highlights: '' };
   }
 
   // Validates and normalises an unknown object into app state. Returns { ok, data, error }.
@@ -158,7 +167,8 @@
         notes.push({ id: nid, date: ndate, title: ntitle, body: nbody });
       }
     }
-    return { ok: true, migrated: migrated, data: { version: DATA_VERSION, categories: categories, items: items, notes: notes } };
+    var highlights = typeof raw.highlights === 'string' ? cleanHighlights(raw.highlights) : '';
+    return { ok: true, migrated: migrated, data: { version: DATA_VERSION, categories: categories, items: items, notes: notes, highlights: highlights } };
   }
 
   /* ---------- storage ---------- */
@@ -231,7 +241,7 @@
 
   /* ---------- state ---------- */
   var state;
-  var ui = { filter: 'all', editMode: false, pendingUndo: null, undoTimer: null, collapsed: {}, noteForm: null, qtyEdit: null };
+  var ui = { filter: 'all', editMode: false, pendingUndo: null, undoTimer: null, collapsed: {}, noteForm: null, qtyEdit: null, highlightEdit: false };
 
   function loadUiPrefs() {
     try {
@@ -330,6 +340,7 @@
     renderOverall();
     renderCategories();
     renderNotes();
+    renderHighlights();
     $('#edit-mode-toggle').setAttribute('aria-pressed', ui.editMode ? 'true' : 'false');
     $('#edit-mode-toggle').textContent = ui.editMode ? '편집 완료' : '편집 모드';
     if (activeKey) {
@@ -631,6 +642,39 @@
     });
   }
 
+  /* ---------- 꼭 기억하기 (상단 고정) ---------- */
+  function renderHighlights() {
+    var box = $('#highlights-body');
+    var lines = state.highlights ? state.highlights.split('\n') : [];
+    var editBtn = $('#highlights-edit-btn');
+    if (ui.highlightEdit) {
+      editBtn.hidden = true;
+      box.innerHTML = '<form class="highlights-form" id="highlights-form">' +
+        '<label for="highlights-input" class="visually-hidden">꼭 기억할 내용 (한 줄에 하나)</label>' +
+        '<textarea id="highlights-input" rows="5" maxlength="' + HIGHLIGHT_MAX + '" data-focus-key="highlights-input" placeholder="한 줄에 하나씩 적으세요.\n예: 마스크 꼭 착용\n예: 다음 진료 태동검사">' + escapeHtml(state.highlights) + '</textarea>' +
+        '<div class="note-form__actions"><button type="submit" class="btn btn--primary btn--small">저장</button>' +
+        '<button type="button" class="btn btn--small" data-action="cancel-highlights">취소</button></div></form>';
+      return;
+    }
+    editBtn.hidden = false;
+    editBtn.textContent = lines.length ? '수정' : '추가';
+    if (!lines.length) {
+      box.innerHTML = '<p class="highlights-empty">진료 메모 중 꼭 기억할 내용을 여기에 적어 두면 항상 맨 위에 보입니다.</p>';
+      return;
+    }
+    box.innerHTML = '<ul class="highlights-list">' + lines.map(function (l) {
+      return '<li>' + escapeHtml(l) + '</li>';
+    }).join('') + '</ul>';
+  }
+
+  function saveHighlights(text) {
+    state.highlights = cleanHighlights(text);
+    ui.highlightEdit = false;
+    commit();
+    showToast(state.highlights ? '꼭 기억하기를 저장했습니다.' : '꼭 기억하기를 비웠습니다.');
+    $('#highlights-edit-btn').focus();
+  }
+
   /* ---------- toast / undo ---------- */
   function showToast(text, undoFn) {
     var toast = $('#toast');
@@ -845,7 +889,8 @@
       exportedAt: new Date().toISOString(),
       categories: state.categories,
       items: state.items,
-      notes: state.notes
+      notes: state.notes,
+      highlights: state.highlights
     }, null, 2);
     var blob = new Blob([payload], { type: 'application/json' });
     var url = URL.createObjectURL(blob);
@@ -936,6 +981,32 @@
       if (fn) fn();
     });
     $('#toast-close').addEventListener('click', hideToast);
+
+    $('#highlights-edit-btn').addEventListener('click', function () {
+      ui.highlightEdit = true;
+      renderHighlights();
+      var ta = $('#highlights-input');
+      if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+    });
+    $('#highlights').addEventListener('submit', function (e) {
+      if (e.target.id !== 'highlights-form') return;
+      e.preventDefault();
+      saveHighlights($('#highlights-input').value);
+    });
+    $('#highlights').addEventListener('click', function (e) {
+      var btn = e.target.closest('[data-action="cancel-highlights"]');
+      if (!btn) return;
+      ui.highlightEdit = false;
+      renderHighlights();
+      $('#highlights-edit-btn').focus();
+    });
+    $('#highlights').addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && e.target.id === 'highlights-input') {
+        ui.highlightEdit = false;
+        renderHighlights();
+        $('#highlights-edit-btn').focus();
+      }
+    });
 
     var notesRoot = $('#notes');
     $('#add-note-btn').addEventListener('click', function () {

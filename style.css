@@ -101,6 +101,25 @@ button, input, select, textarea { font: inherit; color: inherit; }
   transition: width 0.25s ease;
 }
 
+/* ---------- 꼭 기억하기 ---------- */
+.highlights {
+  margin-top: 10px;
+  background: #fff6ef;
+  border: 1px solid var(--peach);
+  border-radius: var(--radius);
+  padding: 10px 14px 12px;
+}
+.highlights__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.highlights__title { font-size: 1rem; margin: 0; }
+.highlights-list { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 3px; font-size: 0.95rem; line-height: 1.45; }
+.highlights-list li::marker { color: var(--peach-strong); }
+.highlights-empty { margin: 6px 0 0; font-size: 0.85rem; color: var(--muted); }
+.highlights-form { display: grid; gap: 8px; margin-top: 8px; }
+.highlights-form textarea {
+  width: 100%; min-height: 120px; padding: 10px 12px; border: 1px solid var(--border);
+  border-radius: 10px; background: #fff; resize: vertical; line-height: 1.5;
+}
+
 /* ---------- Filter bar (sticky) ---------- */
 .toolbar {
   position: sticky; top: 0; z-index: 30;
