@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="출산가방 준비물을 확인하고 수량을 기록하며 가방에 담은 물품을 체크하는 체크리스트">
+  <meta name="theme-color" content="#fff8f2">
+  <title>출산가방 체크리스트</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <a class="skip-link" href="#categories">본문으로 건너뛰기</a>
+
+  <header class="app-header">
+    <div class="app-header__top">
+      <h1 class="app-title">출산가방 체크리스트</h1>
+      <p class="save-status" id="save-status" role="status" aria-live="polite"></p>
+    </div>
+    <p class="app-subtitle">
+      체크는 <strong>‘가방에 담기 완료’</strong>를 뜻합니다. 구매 여부와는 별개예요.
+    </p>
+
+    <section class="progress-card" aria-labelledby="overall-progress-title">
+      <div class="progress-head">
+        <h2 id="overall-progress-title" class="progress-title">전체 진행률</h2>
+        <p class="progress-text" id="overall-progress-text"></p>
+      </div>
+      <div class="progress-bar" role="progressbar" id="overall-progress-bar"
+           aria-labelledby="overall-progress-title" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <div class="progress-bar__fill" id="overall-progress-fill"></div>
+      </div>
+    </section>
+
+    <div class="toolbar">
+      <fieldset class="filter-group" id="filter-group">
+        <legend class="visually-hidden">보기 필터</legend>
+        <label class="filter-option"><input type="radio" name="filter" value="all" checked><span>전체</span></label>
+        <label class="filter-option"><input type="radio" name="filter" value="todo"><span>미완료</span></label>
+        <label class="filter-option"><input type="radio" name="filter" value="done"><span>완료</span></label>
+        <label class="filter-option"><input type="radio" name="filter" value="excluded"><span>제외</span></label>
+      </fieldset>
+
+      <div class="toolbar__actions">
+        <button type="button" class="btn btn--toggle" id="edit-mode-toggle" aria-pressed="false">편집 모드</button>
+        <button type="button" class="btn btn--primary" id="add-category-btn">분류 추가</button>
+        <details class="menu" id="backup-menu">
+          <summary class="btn">백업</summary>
+          <div class="menu__panel">
+            <button type="button" class="menu__item" id="export-btn">JSON 파일로 내보내기</button>
+            <button type="button" class="menu__item" id="import-btn">JSON 파일 불러오기</button>
+            <input type="file" id="import-file" accept="application/json,.json" class="visually-hidden" tabindex="-1" aria-hidden="true">
+            <p class="menu__help">불러오기는 현재 목록을 파일 내용으로 교체합니다.</p>
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <form class="inline-form add-category-form" id="add-category-form" hidden>
+      <label for="new-category-name" class="visually-hidden">새 분류 이름</label>
+      <input type="text" id="new-category-name" placeholder="새 분류 이름" maxlength="40" autocomplete="off" required>
+      <button type="submit" class="btn btn--primary">추가</button>
+      <button type="button" class="btn" id="add-category-cancel">취소</button>
+    </form>
+
+    <div class="notices">
+      <p class="notice">참고용 준비물 목록입니다. 병원·조리원 준비물 안내에 맞춰 목록과 수량을 수정하세요.</p>
+      <p class="notice">기록은 현재 기기의 브라우저에 저장됩니다. 다른 기기와 자동으로 동기화되지 않으며, 브라우저 데이터를 삭제하면 기록이 사라질 수 있습니다.</p>
+      <p class="notice notice--warn" id="storage-warning" hidden></p>
+    </div>
+  </header>
+
+  <main id="categories" class="categories" aria-label="분류별 준비물"></main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden>
+    <span class="toast__text" id="toast-text"></span>
+    <button type="button" class="btn btn--small toast__undo" id="toast-undo" hidden>실행 취소</button>
+    <button type="button" class="toast__close" id="toast-close" aria-label="알림 닫기">×</button>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
