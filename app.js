@@ -7,7 +7,7 @@
   var DATA_VERSION = 1;
   var UNIT_PRESETS = ['개', '벌', '팩', '장', '쌍', '세트'];
   var UNDO_MS = 8000;
-  var ICON_PRESETS = ['👶', '🤱', '🧳', '🍼', '🧸', '🏥', '🎒', '🧴', '👕', '📄', '✨'];
+  var ICON_PRESETS = ['👶🏻', '🤱🏻', '🧳', '🍼', '🧸', '🏥', '🎒', '🧴', '👕', '📄', '✨'];
   var ICON_MAX = 16; // UTF-16 code units; enough for one multi-codepoint emoji
   var NOTE_MAX = 5000;
 
@@ -18,13 +18,16 @@
     return '';
   }
 
+  // Emoji saved before skin tones were applied -> same emoji with the light skin tone
+  var ICON_TONE_UPGRADES = { '👶': '👶🏻', '🤱': '🤱🏻' };
+
   function cleanIcon(value) {
     return String(value == null ? '' : value).replace(/\s+/g, '').slice(0, ICON_MAX);
   }
 
   var DEFAULT_TEMPLATE = [
-    { name: '아기 용품', icon: '👶', items: ['젖병', '젖꼭지', '젖병 세정 도구', '아기 손수건', '아기 배냇저고리', '속싸개', '겉싸개', '손싸개', '발싸개', '아기 모자', '아기 양말', '기저귀 발진 크림', '체온계', '바구니 카시트', '아기 세탁세제', '아기 물티슈', '아기 면봉', '아기 보습 제품', '아기 기저귀'] },
-    { name: '산모 용품', icon: '🤱', items: ['산모 수첩', '신분증', '손목 보호대', '발목 보호대', '돌돌이 양말', '임산부 레깅스', '가디건', '압박 스타킹', '유축기', '유축기 깔때기', '초유 저장팩', '수유 패드', '수유 브라 또는 나시', '산모 패드', '산모 팬티', '입는 생리대', '생리대 오버나이트 또는 대형', '유두 보호 크림', '튼살 크림', '철분제 및 기타 영양제', '슬리퍼', '굽은 빨대', '텀블러 또는 종이컵', '비데 물티슈'] },
+    { name: '아기 용품', icon: '👶🏻', items: ['젖병', '젖꼭지', '젖병 세정 도구', '아기 손수건', '아기 배냇저고리', '속싸개', '겉싸개', '손싸개', '발싸개', '아기 모자', '아기 양말', '기저귀 발진 크림', '체온계', '바구니 카시트', '아기 세탁세제', '아기 물티슈', '아기 면봉', '아기 보습 제품', '아기 기저귀'] },
+    { name: '산모 용품', icon: '🤱🏻', items: ['산모 수첩', '신분증', '손목 보호대', '발목 보호대', '돌돌이 양말', '임산부 레깅스', '가디건', '압박 스타킹', '유축기', '유축기 깔때기', '초유 저장팩', '수유 패드', '수유 브라 또는 나시', '산모 패드', '산모 팬티', '입는 생리대', '생리대 오버나이트 또는 대형', '유두 보호 크림', '튼살 크림', '철분제 및 기타 영양제', '슬리퍼', '굽은 빨대', '텀블러 또는 종이컵', '비데 물티슈'] },
     { name: '기타', icon: '🧳', items: ['노트북', '충전기', '태블릿', '수건', '무형광 세탁망', '각티슈', '물티슈', '세면도구', '양치도구', '기초 화장품', '네임펜', '메모지', '가위', '여분 지퍼백', '머리끈 또는 머리띠', '손톱깎이', '멀티탭', '보호자 의류', '보호자 침구'] }
   ];
 
@@ -100,7 +103,10 @@
       // icon is optional; data saved before icons existed gets the template icon for default names
       var icon = '';
       if (c.icon === undefined) { icon = defaultIconFor(cname); if (icon) migrated = true; }
-      else if (typeof c.icon === 'string') icon = cleanIcon(c.icon);
+      else if (typeof c.icon === 'string') {
+        icon = cleanIcon(c.icon);
+        if (ICON_TONE_UPGRADES[icon]) { icon = ICON_TONE_UPGRADES[icon]; migrated = true; }
+      }
       categories.push({ id: cid, name: cname.slice(0, 40), icon: icon });
     }
 
