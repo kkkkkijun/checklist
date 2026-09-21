@@ -265,7 +265,7 @@
 
   /* ---------- state ---------- */
   var state;
-  var ui = { filter: 'all', editMode: false, pendingUndo: null, undoTimer: null, collapsed: {}, noteForm: null, qtyEdit: null, highlightEdit: false, activeCategory: null, highlightsCollapsed: false, itemEdit: null, view: 'checklist', picksEdit: null };
+  var ui = { filter: 'all', editMode: false, pendingUndo: null, undoTimer: null, collapsed: {}, noteForm: null, qtyEdit: null, highlightEdit: false, activeCategory: null, highlightsCollapsed: false, itemEdit: null, view: 'checklist', picksEdit: null, picksActive: 'gpt' };
 
   // Active tab (narrow screens): falls back to the first category when the saved one is gone.
   function activeCategoryId() {
@@ -298,6 +298,7 @@
         if (typeof parsed.activeCategory === 'string') ui.activeCategory = parsed.activeCategory;
         ui.highlightsCollapsed = parsed.highlightsCollapsed === true;
         if (parsed.view === 'checklist' || parsed.view === 'notes' || parsed.view === 'picks') ui.view = parsed.view;
+        if (parsed.picksActive === 'gpt' || parsed.picksActive === 'claude') ui.picksActive = parsed.picksActive;
       }
     } catch (e) { /* UI preferences are optional */ }
   }
@@ -310,6 +311,7 @@
       window.localStorage.setItem(UI_KEY, JSON.stringify({
         collapsed: ui.collapsed,
         activeCategory: ui.activeCategory,
+        picksActive: ui.picksActive,
         view: ui.view,
         highlightsCollapsed: ui.highlightsCollapsed
       }));
@@ -768,10 +770,30 @@
   }
 
   /* ---------- 택일 정보 (GPT / Claude) ---------- */
+  function activePickKey() {
+    return ui.picksActive === 'claude' ? 'claude' : 'gpt';
+  }
+
+  function renderPickTabs() {
+    var bar = $('#pick-tabs');
+    if (!bar) return;
+    var active = activePickKey();
+    bar.innerHTML = PICK_KEYS.map(function (key) {
+      var filled = !!(state.picks && state.picks[key]);
+      var on = key === active;
+      return '<button type="button" role="tab" class="category-tab' + (on ? ' is-active' : '') + '" data-action="pick-subtab" data-pick-key="' + key + '" data-focus-key="picktab:' + key + '" aria-selected="' + (on ? 'true' : 'false') + '" aria-controls="pick-' + key + '" tabindex="' + (on ? '0' : '-1') + '">' +
+        '<span class="category-tab__name">' + pickLabel(key) + '</span>' +
+        (filled ? '<span class="category-tab__count">작성됨</span>' : '') + '</button>';
+    }).join('');
+  }
+
   function renderPicks() {
+    renderPickTabs();
+    var active = activePickKey();
     PICK_KEYS.forEach(function (key) {
       var card = document.querySelector('[data-pick="' + key + '"]');
       if (!card) return;
+      card.hidden = key !== active; // only the active pick block is shown
       var body = $('.pick__body', card);
       var editBtn = $('[data-action="edit-pick"]', card);
       var text = (state.picks && state.picks[key]) || '';
@@ -779,7 +801,7 @@
         editBtn.hidden = true;
         body.innerHTML = '<form class="pick-form" data-pick-form="' + key + '">' +
           '<label class="visually-hidden" for="pick-input-' + key + '">' + pickLabel(key) + '이(가) 알려준 택일 정보</label>' +
-          '<textarea id="pick-input-' + key + '" rows="10" maxlength="' + PICK_MAX + '" data-focus-key="pick-input:' + key + '" placeholder="' + pickLabel(key) + '에게 받은 택일 정보를 붙여넣으세요.">' + escapeHtml(text) + '</textarea>' +
+          '<textarea id="pick-input-' + key + '" rows="12" maxlength="' + PICK_MAX + '" data-focus-key="pick-input:' + key + '" placeholder="' + pickLabel(key) + '에게 받은 택일 정보를 붙여넣으세요.">' + escapeHtml(text) + '</textarea>' +
           '<div class="note-form__actions"><button type="submit" class="btn btn--primary btn--small">저장</button>' +
           '<button type="button" class="btn btn--small" data-action="cancel-pick">취소</button></div></form>';
         return;
@@ -790,6 +812,14 @@
         ? '<div class="pick__text">' + escapeHtml(text) + '</div>'
         : '<p class="pick__empty">' + pickLabel(key) + '에게 받은 택일 정보를 여기에 붙여넣으세요.</p>';
     });
+  }
+
+  function setActivePick(key) {
+    if (PICK_KEYS.indexOf(key) === -1 || key === activePickKey()) return;
+    ui.picksActive = key;
+    ui.picksEdit = null;
+    saveUiPrefs();
+    renderPicks();
   }
 
   function savePick(key, text) {
@@ -1462,12 +1492,28 @@
 
     var picksRoot = $('#view-picks');
     if (picksRoot) {
+      picksRoot.addEventListener('keydown', function (e) {
+        if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+        if (!e.target.closest('[data-action="pick-subtab"]')) return;
+        e.preventDefault();
+        setActivePick(activePickKey() === 'gpt' ? 'claude' : 'gpt');
+        var again = document.querySelector('[data-focus-key="picktab:' + activePickKey() + '"]');
+        if (again) again.focus();
+      });
       picksRoot.addEventListener('click', function (e) {
+        var subtab = e.target.closest('[data-action="pick-subtab"]');
+        if (subtab) {
+          setActivePick(subtab.dataset.pickKey);
+          var again = document.querySelector('[data-focus-key="picktab:' + subtab.dataset.pickKey + '"]');
+          if (again) again.focus();
+          return;
+        }
         var btn = e.target.closest('button[data-action]');
         if (!btn) return;
         var card = btn.closest('[data-pick]');
         var key = card && card.dataset.pick;
         if (btn.dataset.action === 'edit-pick') {
+          ui.picksActive = key;
           ui.picksEdit = key;
           renderPicks();
           var ta = document.querySelector('[data-focus-key="pick-input:' + key + '"]');

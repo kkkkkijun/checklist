@@ -447,6 +447,7 @@ input[type="number"] { -moz-appearance: textfield; }
 
 /* ---------- 택일 정보 ---------- */
 #view-picks { margin-top: 14px; }
+.pick-tabs { margin: 0 0 12px; }
 .picks__hint { margin: 0 0 12px; }
 .pick { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 12px 14px; margin-bottom: 12px; }
 .pick__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
