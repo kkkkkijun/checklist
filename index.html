@@ -13,9 +13,9 @@
   <link rel="apple-touch-icon" href="./apple-touch-icon.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="apple-mobile-web-app-title" content="내여보 출산가방">
+  <meta name="apple-mobile-web-app-title" content="마미백">
   <meta name="mobile-web-app-capable" content="yes">
-  <link rel="stylesheet" href="./style.css?v=20260921e">
+  <link rel="stylesheet" href="./style.css?v=20260921f">
 </head>
 <body>
   <a class="skip-link" href="#categories">본문으로 건너뛰기</a>
@@ -79,6 +79,11 @@
       <span class="primary-tab__icon" aria-hidden="true">📅</span>
       <span class="primary-tab__label">택일 정보</span>
       <span class="primary-tab__count" id="ptab-picks-count"></span>
+    </button>
+    <button type="button" class="primary-tab" data-view="names" role="tab" aria-selected="false" aria-controls="view-names" id="ptab-names" tabindex="-1">
+      <span class="primary-tab__icon" aria-hidden="true">✍️</span>
+      <span class="primary-tab__label">작명 노트</span>
+      <span class="primary-tab__count" id="ptab-names-count"></span>
     </button>
   </nav>
 
@@ -148,7 +153,16 @@
   </section>
 
   <section id="view-picks" class="view picks" role="tabpanel" aria-labelledby="ptab-picks" hidden>
-    <p class="notice picks__hint">GPT와 Claude에게 받은 택일 정보를 각각 붙여넣어 보관하세요. 준비물·진료 메모와 함께 이 기기에 저장되고 백업·가족 공유에도 포함됩니다.</p>
+    <div class="datecands__head">
+      <h2 class="datecands__title">📅 택일 후보</h2>
+      <button type="button" class="btn btn--primary btn--small" id="add-date-btn">후보 추가</button>
+    </div>
+    <p class="notice">확정·후보 날짜를 등록하면 작명 노트의 이름 후보와 서로 연결됩니다.</p>
+    <ul class="datecard-list" id="date-list"></ul>
+
+    <hr class="view-sep">
+
+    <p class="notice picks__hint">참고 메모 — GPT와 Claude에게 받은 택일 설명을 각각 붙여넣어 보관하세요. 위 택일 후보와 함께 저장·백업·가족 공유에 포함됩니다.</p>
     <div class="category-tabs pick-tabs" id="pick-tabs" role="tablist" aria-label="택일 정보 선택"></div>
     <article class="pick" id="pick-gpt" data-pick="gpt">
       <div class="pick__head">
@@ -166,6 +180,15 @@
     </article>
   </section>
 
+  <section id="view-names" class="view names" role="tabpanel" aria-labelledby="ptab-names" hidden>
+    <div class="notes__head">
+      <h2 class="notes__title">✍️ 작명 노트 <span class="notes__count" id="name-count"></span></h2>
+      <button type="button" class="btn btn--primary" id="add-name-btn">이름 추가</button>
+    </div>
+    <p class="notice notes__hint">한글 이름과 한자 풀이 후보를 적고, 택일 후보와 연결해 종합하세요. 별(★)로 마음에 드는 이름을 위로 고정할 수 있습니다.</p>
+    <ul class="namecard-list" id="name-list"></ul>
+  </section>
+
   <footer class="app-footer">
     <p class="notice">기록은 이 기기의 브라우저에 저장됩니다. 브라우저 데이터를 삭제하면 기록이 사라질 수 있으니 <strong>백업</strong> 메뉴에서 JSON으로 내보내 두세요. 여러 기기에서 함께 쓰려면 <strong>가족 공유</strong>를 사용하세요.</p>
   </footer>
@@ -176,9 +199,9 @@
     <button type="button" class="toast__close" id="toast-close" aria-label="알림 닫기">×</button>
   </div>
 
-  <script src="./firebase-config.js?v=20260921e"></script>
-  <script src="./app.js?v=20260921e"></script>
-  <script src="./sync.js?v=20260921e"></script>
+  <script src="./firebase-config.js?v=20260921f"></script>
+  <script src="./app.js?v=20260921f"></script>
+  <script src="./sync.js?v=20260921f"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function () {

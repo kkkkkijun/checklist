@@ -13,6 +13,13 @@
   var HIGHLIGHT_MAX = 2000;
   var PICK_MAX = 8000;
   var PICK_KEYS = ['gpt', 'claude'];
+  var DATE_LABEL_MAX = 30, DATE_MEMO_MAX = 500, DATE_TIME_MAX = 30;
+  var NAME_MAX = 30, NAME_MEMO_MAX = 500, HANJA_CHARS_MAX = 20, HANJA_MEANING_MAX = 120;
+  function asArray(v) {
+    if (Array.isArray(v)) return v;
+    if (v && typeof v === 'object') return Object.keys(v).map(function (k) { return v[k]; });
+    return [];
+  }
   function pickLabel(key) { return key === 'gpt' ? 'GPT' : 'Claude'; }
   function cleanPickText(text) {
     return String(text == null ? '' : text).replace(/\r\n?/g, '\n').replace(/\n{4,}/g, '\n\n\n').trim().slice(0, PICK_MAX);
@@ -101,7 +108,7 @@
         items.push({ id: uid(), categoryId: cid, name: name, qty: null, unit: '', memo: '', done: false, excluded: false });
       });
     });
-    return { version: DATA_VERSION, categories: categories, items: items, notes: [], highlights: '', picks: emptyPicks() };
+    return { version: DATA_VERSION, categories: categories, items: items, notes: [], highlights: '', picks: emptyPicks(), dates: [], names: [] };
   }
 
   // Validates and normalises an unknown object into app state. Returns { ok, data, error }.
@@ -183,7 +190,60 @@
     }
     var highlights = typeof raw.highlights === 'string' ? cleanHighlights(raw.highlights) : '';
     var picks = normalizePicks(raw.picks);
-    return { ok: true, migrated: migrated, data: { version: DATA_VERSION, categories: categories, items: items, notes: notes, highlights: highlights, picks: picks } };
+
+    // 택일 후보 (structured)
+    var dates = [];
+    var seenDate = {};
+    if (raw.dates !== undefined) {
+      if (!Array.isArray(raw.dates)) return { ok: false, error: '택일 후보 목록이 올바르지 않습니다.' };
+      for (var di = 0; di < raw.dates.length; di++) {
+        var dc = raw.dates[di];
+        if (!dc || typeof dc !== 'object') return { ok: false, error: (di + 1) + '번째 택일 후보가 올바르지 않습니다.' };
+        var did = typeof dc.id === 'string' ? dc.id.trim() : '';
+        if (!did) return { ok: false, error: (di + 1) + '번째 택일 후보에 ID가 없습니다.' };
+        if (seenDate[did]) return { ok: false, error: '택일 후보 ID가 중복되었습니다: ' + did };
+        var ddate = typeof dc.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dc.date) ? dc.date : '';
+        var dtime = typeof dc.time === 'string' ? dc.time.trim().slice(0, DATE_TIME_MAX) : '';
+        var dlabel = typeof dc.label === 'string' ? dc.label.trim().slice(0, DATE_LABEL_MAX) : '';
+        var dmemo = typeof dc.memo === 'string' ? dc.memo.replace(/\r\n?/g, '\n').trim().slice(0, DATE_MEMO_MAX) : '';
+        if (!ddate && !dlabel && !dmemo && !dtime) return { ok: false, error: (di + 1) + '번째 택일 후보가 비어 있습니다.' };
+        seenDate[did] = true;
+        dates.push({ id: did, date: ddate, time: dtime, label: dlabel, memo: dmemo });
+      }
+    }
+
+    // 이름 후보 (한자 풀이 + 택일 연결)
+    var names = [];
+    var seenName = {};
+    if (raw.names !== undefined) {
+      if (!Array.isArray(raw.names)) return { ok: false, error: '이름 후보 목록이 올바르지 않습니다.' };
+      for (var ni = 0; ni < raw.names.length; ni++) {
+        var nc = raw.names[ni];
+        if (!nc || typeof nc !== 'object') return { ok: false, error: (ni + 1) + '번째 이름 후보가 올바르지 않습니다.' };
+        var nid2 = typeof nc.id === 'string' ? nc.id.trim() : '';
+        var nname = typeof nc.name === 'string' ? nc.name.trim().slice(0, NAME_MAX) : '';
+        if (!nid2) return { ok: false, error: (ni + 1) + '번째 이름 후보에 ID가 없습니다.' };
+        if (!nname) return { ok: false, error: (ni + 1) + '번째 이름 후보의 이름이 비어 있습니다.' };
+        if (seenName[nid2]) return { ok: false, error: '이름 후보 ID가 중복되었습니다: ' + nid2 };
+        seenName[nid2] = true;
+        var hanja = [];
+        asArray(nc.hanja).forEach(function (h) {
+          if (!h || typeof h !== 'object') return;
+          var chars = typeof h.chars === 'string' ? h.chars.trim().slice(0, HANJA_CHARS_MAX) : '';
+          var meaning = typeof h.meaning === 'string' ? h.meaning.trim().slice(0, HANJA_MEANING_MAX) : '';
+          if (!chars && !meaning) return;
+          hanja.push({ id: (typeof h.id === 'string' && h.id) ? h.id : uid(), chars: chars, meaning: meaning });
+        });
+        var dateIds = asArray(nc.dateIds).filter(function (x) { return typeof x === 'string' && seenDate[x]; });
+        names.push({
+          id: nid2, name: nname, favorite: nc.favorite === true,
+          memo: typeof nc.memo === 'string' ? nc.memo.replace(/\r\n?/g, '\n').trim().slice(0, NAME_MEMO_MAX) : '',
+          hanja: hanja, dateIds: dateIds
+        });
+      }
+    }
+
+    return { ok: true, migrated: migrated, data: { version: DATA_VERSION, categories: categories, items: items, notes: notes, highlights: highlights, picks: picks, dates: dates, names: names } };
   }
 
   /* ---------- storage ---------- */
@@ -265,7 +325,7 @@
 
   /* ---------- state ---------- */
   var state;
-  var ui = { filter: 'all', editMode: false, pendingUndo: null, undoTimer: null, collapsed: {}, noteForm: null, qtyEdit: null, highlightEdit: false, activeCategory: null, highlightsCollapsed: false, itemEdit: null, view: 'checklist', picksEdit: null, picksActive: 'gpt' };
+  var ui = { filter: 'all', editMode: false, pendingUndo: null, undoTimer: null, collapsed: {}, noteForm: null, qtyEdit: null, highlightEdit: false, activeCategory: null, highlightsCollapsed: false, itemEdit: null, view: 'checklist', picksEdit: null, picksActive: 'gpt', dateEdit: null, nameEdit: null };
 
   // Active tab (narrow screens): falls back to the first category when the saved one is gone.
   function activeCategoryId() {
@@ -297,7 +357,7 @@
         if (parsed.collapsed && typeof parsed.collapsed === 'object') ui.collapsed = parsed.collapsed;
         if (typeof parsed.activeCategory === 'string') ui.activeCategory = parsed.activeCategory;
         ui.highlightsCollapsed = parsed.highlightsCollapsed === true;
-        if (parsed.view === 'checklist' || parsed.view === 'notes' || parsed.view === 'picks') ui.view = parsed.view;
+        if (['checklist','notes','picks','names'].indexOf(parsed.view) !== -1) ui.view = parsed.view;
         if (parsed.picksActive === 'gpt' || parsed.picksActive === 'claude') ui.picksActive = parsed.picksActive;
       }
     } catch (e) { /* UI preferences are optional */ }
@@ -391,11 +451,13 @@
   }
 
   function setView(view) {
-    if (view !== 'checklist' && view !== 'notes' && view !== 'picks') return;
+    if (['checklist','notes','picks','names'].indexOf(view) === -1) return;
     if (ui.view === view) return;
     ui.view = view;
     ui.qtyEdit = null;
     ui.itemEdit = null;
+    ui.dateEdit = null;
+    ui.nameEdit = null;
     saveUiPrefs();
     render();
     var content = document.getElementById(view === 'notes' ? 'view-notes' : 'view-checklist');
@@ -412,16 +474,19 @@
     var pkFilled = PICK_KEYS.filter(function (k) { return state.picks && state.picks[k]; }).length;
     var pkCount = $('#ptab-picks-count');
     if (pkCount) pkCount.textContent = pkFilled ? String(pkFilled) : '';
+    var nmCount = $('#ptab-names-count');
+    if (nmCount) nmCount.textContent = state.names.length ? String(state.names.length) : '';
     Array.prototype.forEach.call(document.querySelectorAll('.primary-tab'), function (btn) {
       var active = btn.dataset.view === ui.view;
       btn.classList.toggle('is-active', active);
       btn.setAttribute('aria-selected', active ? 'true' : 'false');
       btn.tabIndex = active ? 0 : -1;
     });
-    var vc = $('#view-checklist'), vn = $('#view-notes'), vp = $('#view-picks');
+    var vc = $('#view-checklist'), vn = $('#view-notes'), vp = $('#view-picks'), vm = $('#view-names');
     if (vc) vc.hidden = ui.view !== 'checklist';
     if (vn) vn.hidden = ui.view !== 'notes';
     if (vp) vp.hidden = ui.view !== 'picks';
+    if (vm) vm.hidden = ui.view !== 'names';
   }
 
   function render() {
@@ -432,6 +497,8 @@
     renderCategories();
     renderNotes();
     renderPicks();
+    renderDates();
+    renderNames();
     renderHighlights();
     Array.prototype.forEach.call(document.querySelectorAll('[data-edit-toggle]'), function (b) {
       b.setAttribute('aria-pressed', ui.editMode ? 'true' : 'false');
@@ -833,6 +900,239 @@
     if (eb) eb.focus();
   }
 
+  /* ---------- 택일 후보 + 작명 노트 (연계) ---------- */
+  function findDate(id) { for (var i = 0; i < state.dates.length; i++) if (state.dates[i].id === id) return state.dates[i]; return null; }
+  function findName(id) { for (var i = 0; i < state.names.length; i++) if (state.names[i].id === id) return state.names[i]; return null; }
+
+  function dateHeadline(d) {
+    var parts = [];
+    if (d.date) parts.push(formatNoteDate(d.date));
+    if (d.time) parts.push(d.time);
+    return parts.join(' ') || '날짜 미정';
+  }
+  function namesForDate(dateId) { return state.names.filter(function (n) { return n.dateIds.indexOf(dateId) !== -1; }); }
+
+  function dateFormHtml(d) {
+    var isNew = !d;
+    var id = isNew ? 'new' : escapeHtml(d.id);
+    var h = '<form class="date-form" data-date-form="' + id + '">';
+    h += '<div class="field-row"><div class="field"><label for="date-d-' + id + '">날짜</label>';
+    h += '<input type="date" id="date-d-' + id + '" name="date" data-focus-key="date-d:' + id + '" value="' + escapeHtml(isNew ? todayStamp() : d.date) + '"></div>';
+    h += '<div class="field"><label for="date-t-' + id + '">시간 (선택)</label>';
+    h += '<input type="text" id="date-t-' + id + '" name="time" data-focus-key="date-t:' + id + '" value="' + escapeHtml(isNew ? '' : d.time) + '" maxlength="' + DATE_TIME_MAX + '" placeholder="예: 오전 10시"></div></div>';
+    h += '<div class="field"><label for="date-l-' + id + '">라벨 (선택)</label>';
+    h += '<input type="text" id="date-l-' + id + '" name="label" data-focus-key="date-l:' + id + '" value="' + escapeHtml(isNew ? '' : d.label) + '" maxlength="' + DATE_LABEL_MAX + '" placeholder="예: 1순위, 철학관 추천"></div>';
+    h += '<div class="field"><label for="date-m-' + id + '">메모 (선택)</label>';
+    h += '<textarea id="date-m-' + id + '" name="memo" rows="3" maxlength="' + DATE_MEMO_MAX + '" data-focus-key="date-m:' + id + '" placeholder="사주 풀이, 병원 가능 여부 등">' + escapeHtml(isNew ? '' : d.memo) + '</textarea></div>';
+    h += '<p class="field-error" data-error hidden></p>';
+    h += '<div class="note-form__actions"><button type="submit" class="btn btn--primary btn--small">' + (isNew ? '택일 후보 저장' : '수정 저장') + '</button>';
+    h += '<button type="button" class="btn btn--small" data-action="cancel-date">취소</button></div></form>';
+    return h;
+  }
+
+  function renderDates() {
+    var list = $('#date-list');
+    if (!list) return;
+    var html = '';
+    if (ui.dateEdit === 'new') html += '<li class="datecard datecard--editing">' + dateFormHtml(null) + '</li>';
+    if (!state.dates.length && ui.dateEdit !== 'new') {
+      html += '<li class="datecard-empty">아직 택일 후보가 없습니다. ‘후보 추가’로 날짜를 등록하면 작명 노트의 이름과 연결할 수 있어요.</li>';
+    }
+    state.dates.forEach(function (d) {
+      if (ui.dateEdit === d.id) { html += '<li class="datecard datecard--editing" data-date-id="' + escapeHtml(d.id) + '">' + dateFormHtml(d) + '</li>'; return; }
+      var linked = namesForDate(d.id);
+      html += '<li class="datecard" data-date-id="' + escapeHtml(d.id) + '">';
+      html += '<div class="datecard__head"><div class="datecard__meta"><span class="datecard__date">' + escapeHtml(dateHeadline(d)) + '</span>';
+      if (d.label) html += '<span class="badge badge--label">' + escapeHtml(d.label) + '</span>';
+      html += '</div><div class="datecard__actions">';
+      html += '<button type="button" class="btn btn--small" data-action="edit-date" data-focus-key="date-edit:' + escapeHtml(d.id) + '">수정</button>';
+      html += '<button type="button" class="btn btn--small btn--danger" data-action="delete-date">삭제</button></div></div>';
+      if (d.memo) html += '<p class="datecard__memo">' + escapeHtml(d.memo) + '</p>';
+      html += '<div class="linkrow"><span class="linkrow__label">연결된 이름</span>';
+      if (linked.length) html += linked.map(function (n) { return '<span class="chip">' + escapeHtml(n.name) + (n.favorite ? ' ★' : '') + '</span>'; }).join('');
+      else html += '<span class="linkrow__empty">없음 — 작명 노트에서 이름을 이 택일에 연결하세요</span>';
+      html += '</div></li>';
+    });
+    list.innerHTML = html;
+    var addBtn = $('#add-date-btn');
+    if (addBtn) addBtn.hidden = ui.dateEdit === 'new';
+  }
+
+  function readDateForm(form) {
+    var date = form.elements.date.value;
+    if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) date = '';
+    return {
+      date: date,
+      time: form.elements.time.value.trim().slice(0, DATE_TIME_MAX),
+      label: form.elements.label.value.trim().slice(0, DATE_LABEL_MAX),
+      memo: form.elements.memo.value.replace(/\r\n?/g, '\n').trim().slice(0, DATE_MEMO_MAX)
+    };
+  }
+
+  function submitDateForm(form) {
+    var v = readDateForm(form);
+    var err = $('[data-error]', form);
+    if (!v.date && !v.label && !v.time && !v.memo) { err.textContent = '날짜나 라벨 중 하나는 입력하세요.'; err.hidden = false; return; }
+    var key = form.dataset.dateForm;
+    if (key === 'new') {
+      state.dates.push({ id: uid(), date: v.date, time: v.time, label: v.label, memo: v.memo });
+      ui.dateEdit = null; commit(); showToast('택일 후보를 저장했습니다.');
+      var ab = $('#add-date-btn'); if (ab) ab.focus();
+    } else {
+      var d = findDate(key);
+      if (!d) { ui.dateEdit = null; render(); return; }
+      d.date = v.date; d.time = v.time; d.label = v.label; d.memo = v.memo;
+      ui.dateEdit = null; commit(); showToast('택일 후보를 수정했습니다.');
+    }
+  }
+
+  function deleteDate(id) {
+    var idx = -1; for (var i = 0; i < state.dates.length; i++) if (state.dates[i].id === id) idx = i;
+    if (idx < 0) return;
+    var d = state.dates[idx];
+    var linked = namesForDate(id);
+    var msg = '‘' + dateHeadline(d) + (d.label ? ' · ' + d.label : '') + '’ 택일 후보를 삭제할까요?' + (linked.length ? '\n연결된 이름 ' + linked.length + '개에서 이 택일 연결이 해제됩니다.' : '');
+    if (!window.confirm(msg)) return;
+    var affected = linked.map(function (n) { return n.id; });
+    state.dates.splice(idx, 1);
+    state.names.forEach(function (n) { n.dateIds = n.dateIds.filter(function (x) { return x !== id; }); });
+    if (ui.dateEdit === id) ui.dateEdit = null;
+    commit();
+    showToast('택일 후보를 삭제했습니다.', function () {
+      state.dates.splice(Math.min(idx, state.dates.length), 0, d);
+      affected.forEach(function (nid) { var n = findName(nid); if (n && n.dateIds.indexOf(id) === -1) n.dateIds.push(id); });
+      commit(); showToast('삭제를 취소했습니다.');
+    });
+  }
+
+  /* ---- 작명 노트 ---- */
+  function namesSorted() {
+    return state.names.slice().sort(function (a, b) {
+      if (!!a.favorite !== !!b.favorite) return a.favorite ? -1 : 1;
+      return state.names.indexOf(a) - state.names.indexOf(b);
+    });
+  }
+
+  function hanjaRowHtml(h) {
+    h = h || { chars: '', meaning: '' };
+    return '<div class="hanja-row">' +
+      '<input type="text" class="hanja-row__chars" value="' + escapeHtml(h.chars) + '" maxlength="' + HANJA_CHARS_MAX + '" placeholder="한자 (예: 舒俊)" aria-label="한자">' +
+      '<input type="text" class="hanja-row__meaning" value="' + escapeHtml(h.meaning) + '" maxlength="' + HANJA_MEANING_MAX + '" placeholder="풀이 (예: 舒 펼 서 · 俊 준걸 준)" aria-label="한자 풀이">' +
+      '<button type="button" class="hanja-row__del" data-action="remove-hanja" aria-label="이 한자 후보 삭제">×</button></div>';
+  }
+
+  function nameFormHtml(n) {
+    var isNew = !n;
+    var id = isNew ? 'new' : escapeHtml(n.id);
+    var hanja = isNew ? [{ chars: '', meaning: '' }] : (n.hanja.length ? n.hanja : [{ chars: '', meaning: '' }]);
+    var h = '<form class="name-form" data-name-form="' + id + '">';
+    h += '<div class="field"><label for="name-n-' + id + '">이름 (한글)</label>';
+    h += '<input type="text" id="name-n-' + id + '" name="name" data-focus-key="name-n:' + id + '" value="' + escapeHtml(isNew ? '' : n.name) + '" maxlength="' + NAME_MAX + '" placeholder="예: 서준" required></div>';
+    h += '<label class="chk"><input type="checkbox" name="favorite"' + (!isNew && n.favorite ? ' checked' : '') + '> 즐겨찾기 (★로 위에 고정)</label>';
+    h += '<fieldset class="subfield"><legend>한자 풀이 후보</legend><div class="hanja-rows" data-hanja-rows>';
+    h += hanja.map(hanjaRowHtml).join('');
+    h += '</div><button type="button" class="btn btn--small" data-action="add-hanja">+ 한자 후보 추가</button></fieldset>';
+    h += '<div class="field"><label for="name-m-' + id + '">메모 (선택)</label>';
+    h += '<textarea id="name-m-' + id + '" name="memo" rows="3" maxlength="' + NAME_MEMO_MAX + '" placeholder="뜻·느낌·유래 등">' + escapeHtml(isNew ? '' : n.memo) + '</textarea></div>';
+    h += '<fieldset class="subfield"><legend>연결할 택일 후보</legend>';
+    if (state.dates.length) {
+      h += '<div class="date-links">' + state.dates.map(function (d) {
+        var checked = !isNew && n.dateIds.indexOf(d.id) !== -1;
+        return '<label class="chk chk--chip"><input type="checkbox" name="dateId" value="' + escapeHtml(d.id) + '"' + (checked ? ' checked' : '') + '> ' + escapeHtml(dateHeadline(d) + (d.label ? ' · ' + d.label : '')) + '</label>';
+      }).join('') + '</div>';
+    } else {
+      h += '<p class="subfield__hint">택일 탭에서 택일 후보를 먼저 추가하면 여기에서 연결할 수 있습니다.</p>';
+    }
+    h += '</fieldset>';
+    h += '<p class="field-error" data-error hidden></p>';
+    h += '<div class="note-form__actions"><button type="submit" class="btn btn--primary btn--small">' + (isNew ? '이름 저장' : '수정 저장') + '</button>';
+    h += '<button type="button" class="btn btn--small" data-action="cancel-name">취소</button></div></form>';
+    return h;
+  }
+
+  function renderNames() {
+    var list = $('#name-list');
+    if (!list) return;
+    var html = '';
+    if (ui.nameEdit === 'new') html += '<li class="namecard namecard--editing">' + nameFormHtml(null) + '</li>';
+    if (!state.names.length && ui.nameEdit !== 'new') {
+      html += '<li class="datecard-empty">아직 이름 후보가 없습니다. ‘이름 추가’로 한글 이름과 한자 풀이 후보를 적어 보세요.</li>';
+    }
+    namesSorted().forEach(function (n) {
+      if (ui.nameEdit === n.id) { html += '<li class="namecard namecard--editing" data-name-id="' + escapeHtml(n.id) + '">' + nameFormHtml(n) + '</li>'; return; }
+      html += '<li class="namecard' + (n.favorite ? ' is-fav' : '') + '" data-name-id="' + escapeHtml(n.id) + '">';
+      html += '<div class="namecard__head">';
+      html += '<button type="button" class="star" data-action="toggle-fav" aria-pressed="' + (n.favorite ? 'true' : 'false') + '" aria-label="' + escapeHtml(n.name) + ' 즐겨찾기">' + (n.favorite ? '★' : '☆') + '</button>';
+      html += '<span class="namecard__name">' + escapeHtml(n.name) + '</span>';
+      html += '<div class="namecard__actions"><button type="button" class="btn btn--small" data-action="edit-name" data-focus-key="name-edit:' + escapeHtml(n.id) + '">수정</button>';
+      html += '<button type="button" class="btn btn--small btn--danger" data-action="delete-name">삭제</button></div></div>';
+      if (n.hanja.length) {
+        html += '<ul class="hanja-list">' + n.hanja.map(function (h) {
+          return '<li class="hanja">' + (h.chars ? '<span class="hanja__chars">' + escapeHtml(h.chars) + '</span>' : '') + (h.meaning ? '<span class="hanja__meaning">' + escapeHtml(h.meaning) + '</span>' : '') + '</li>';
+        }).join('') + '</ul>';
+      }
+      if (n.memo) html += '<p class="namecard__memo">' + escapeHtml(n.memo) + '</p>';
+      html += '<div class="linkrow"><span class="linkrow__label">연결된 택일</span>';
+      var linked = n.dateIds.map(findDate).filter(Boolean);
+      if (linked.length) html += linked.map(function (d) { return '<span class="chip">' + escapeHtml(dateHeadline(d) + (d.label ? ' · ' + d.label : '')) + '</span>'; }).join('');
+      else html += '<span class="linkrow__empty">없음</span>';
+      html += '</div></li>';
+    });
+    list.innerHTML = html;
+    var addBtn = $('#add-name-btn');
+    if (addBtn) addBtn.hidden = ui.nameEdit === 'new';
+  }
+
+  function readNameForm(form) {
+    var hanja = [];
+    Array.prototype.forEach.call(form.querySelectorAll('.hanja-row'), function (row) {
+      var chars = row.querySelector('.hanja-row__chars').value.trim().slice(0, HANJA_CHARS_MAX);
+      var meaning = row.querySelector('.hanja-row__meaning').value.trim().slice(0, HANJA_MEANING_MAX);
+      if (chars || meaning) hanja.push({ id: uid(), chars: chars, meaning: meaning });
+    });
+    var dateIds = [];
+    Array.prototype.forEach.call(form.querySelectorAll('input[name="dateId"]:checked'), function (cb) {
+      if (findDate(cb.value)) dateIds.push(cb.value);
+    });
+    return { name: form.elements.name.value.trim().slice(0, NAME_MAX), favorite: form.elements.favorite.checked, memo: form.elements.memo.value.replace(/\r\n?/g, '\n').trim().slice(0, NAME_MEMO_MAX), hanja: hanja, dateIds: dateIds };
+  }
+
+  function submitNameForm(form) {
+    var v = readNameForm(form);
+    var err = $('[data-error]', form);
+    if (!v.name) { err.textContent = '한글 이름을 입력하세요.'; err.hidden = false; form.elements.name.focus(); return; }
+    var key = form.dataset.nameForm;
+    if (key === 'new') {
+      state.names.push({ id: uid(), name: v.name, favorite: v.favorite, memo: v.memo, hanja: v.hanja, dateIds: v.dateIds });
+      ui.nameEdit = null; commit(); showToast('이름 후보를 저장했습니다.');
+      var ab = $('#add-name-btn'); if (ab) ab.focus();
+    } else {
+      var n = findName(key);
+      if (!n) { ui.nameEdit = null; render(); return; }
+      n.name = v.name; n.favorite = v.favorite; n.memo = v.memo; n.hanja = v.hanja; n.dateIds = v.dateIds;
+      ui.nameEdit = null; commit(); showToast('이름 후보를 수정했습니다.');
+    }
+  }
+
+  function toggleNameFav(id) {
+    var n = findName(id); if (!n) return;
+    n.favorite = !n.favorite; commit();
+  }
+
+  function deleteName(id) {
+    var idx = -1; for (var i = 0; i < state.names.length; i++) if (state.names[i].id === id) idx = i;
+    if (idx < 0) return;
+    var n = state.names[idx];
+    if (!window.confirm('‘' + n.name + '’ 이름 후보를 삭제할까요?')) return;
+    state.names.splice(idx, 1);
+    if (ui.nameEdit === id) ui.nameEdit = null;
+    commit();
+    showToast('이름 후보를 삭제했습니다.', function () {
+      state.names.splice(Math.min(idx, state.names.length), 0, n);
+      commit(); showToast('삭제를 취소했습니다.');
+    });
+  }
+
   /* ---------- 꼭 기억하기 (상단 고정) ---------- */
   function renderHighlights() {
     var box = $('#highlights-body');
@@ -1093,7 +1393,9 @@
       items: state.items,
       notes: state.notes,
       highlights: state.highlights,
-      picks: state.picks
+      picks: state.picks,
+      dates: state.dates,
+      names: state.names
     }, null, pretty ? 2 : 0);
   }
 
@@ -1173,7 +1475,7 @@
     if (el.readOnly || el.disabled) return false; // readonly share-link etc. must not block sync
     if (el.type === 'checkbox' || el.type === 'radio' || el.type === 'file' || el.type === 'button') return false;
     // Only editable fields inside an item/note/highlights editor should defer a remote update.
-    return !!el.closest('.item--edit, .is-qty-editing, .note-form, #highlights-form, #add-category-form, .pick-form');
+    return !!el.closest('.item--edit, .is-qty-editing, .note-form, #highlights-form, #add-category-form, .pick-form, .date-form, .name-form');
   }
 
   function applyRemote(remoteState) {
@@ -1554,6 +1856,71 @@
         if (!form) return;
         e.preventDefault();
         savePick(form.dataset.pickForm, form.querySelector('textarea').value);
+      });
+    }
+
+    // 택일 후보 (view-picks) events
+    var picksView = $('#view-picks');
+    if (picksView) {
+      picksView.addEventListener('click', function (e) {
+        var add = e.target.closest('#add-date-btn');
+        if (add) { ui.dateEdit = 'new'; renderDates(); var f = document.querySelector('[data-focus-key="date-d:new"]'); if (f) f.focus(); return; }
+        var btn = e.target.closest('button[data-action]');
+        if (!btn) return;
+        var li = btn.closest('[data-date-id]');
+        switch (btn.dataset.action) {
+          case 'edit-date': ui.dateEdit = li.dataset.dateId; renderDates(); var ff = document.querySelector('[data-focus-key="date-d:' + li.dataset.dateId + '"]'); if (ff) ff.focus(); break;
+          case 'cancel-date': var wasNew = !li; ui.dateEdit = null; renderDates(); var back = wasNew ? $('#add-date-btn') : document.querySelector('[data-focus-key="date-edit:' + li.dataset.dateId + '"]'); if (back) back.focus(); break;
+          case 'delete-date': deleteDate(li.dataset.dateId); break;
+        }
+      });
+      picksView.addEventListener('submit', function (e) {
+        var form = e.target.closest('form[data-date-form]');
+        if (!form) return;
+        e.preventDefault();
+        submitDateForm(form);
+      });
+    }
+
+    // 작명 노트 (view-names) events
+    var namesView = $('#view-names');
+    if (namesView) {
+      namesView.addEventListener('click', function (e) {
+        var add = e.target.closest('#add-name-btn');
+        if (add) { ui.nameEdit = 'new'; renderNames(); var f = document.querySelector('[data-focus-key="name-n:new"]'); if (f) f.focus(); return; }
+        var addHanja = e.target.closest('[data-action="add-hanja"]');
+        if (addHanja) {
+          var rows = addHanja.closest('.name-form').querySelector('[data-hanja-rows]');
+          var div = document.createElement('div');
+          div.innerHTML = hanjaRowHtml(null);
+          rows.appendChild(div.firstChild);
+          var last = rows.querySelector('.hanja-row:last-child .hanja-row__chars');
+          if (last) last.focus();
+          return;
+        }
+        var rm = e.target.closest('[data-action="remove-hanja"]');
+        if (rm) {
+          var row = rm.closest('.hanja-row');
+          var cont = row.parentNode;
+          if (cont.querySelectorAll('.hanja-row').length > 1) row.remove();
+          else { row.querySelector('.hanja-row__chars').value = ''; row.querySelector('.hanja-row__meaning').value = ''; }
+          return;
+        }
+        var btn = e.target.closest('button[data-action]');
+        if (!btn) return;
+        var li = btn.closest('[data-name-id]');
+        switch (btn.dataset.action) {
+          case 'toggle-fav': toggleNameFav(li.dataset.nameId); break;
+          case 'edit-name': ui.nameEdit = li.dataset.nameId; renderNames(); var nf = document.querySelector('[data-focus-key="name-n:' + li.dataset.nameId + '"]'); if (nf) nf.focus(); break;
+          case 'cancel-name': var wasNew2 = !li; ui.nameEdit = null; renderNames(); var back2 = wasNew2 ? $('#add-name-btn') : document.querySelector('[data-focus-key="name-edit:' + li.dataset.nameId + '"]'); if (back2) back2.focus(); break;
+          case 'delete-name': deleteName(li.dataset.nameId); break;
+        }
+      });
+      namesView.addEventListener('submit', function (e) {
+        var form = e.target.closest('form[data-name-form]');
+        if (!form) return;
+        e.preventDefault();
+        submitNameForm(form);
       });
     }
 

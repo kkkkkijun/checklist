@@ -40,6 +40,7 @@
   }
 
   function validRoomId(id) { return typeof id === 'string' && /^[a-z0-9]{20,40}$/.test(id); }
+  function asArr(v) { if (Array.isArray(v)) return v; if (v && typeof v === 'object') return Object.keys(v).map(function (k) { return v[k]; }); return []; }
 
   function emit() {
     sync.listeners.forEach(function (cb) { try { cb(publicState()); } catch (e) { /* ignore */ } });
@@ -89,6 +90,10 @@
       doc.items[it.id] = { categoryId: it.categoryId, name: it.name, qty: it.qty === null || it.qty === undefined ? null : it.qty, unit: it.unit || '', memo: it.memo || '', done: !!it.done, excluded: !!it.excluded, order: i };
     });
     s.notes.forEach(function (n) { doc.notes[n.id] = { date: n.date || '', title: n.title || '', body: n.body || '' }; });
+    doc.dates = {};
+    (s.dates || []).forEach(function (d, i) { doc.dates[d.id] = { date: d.date || '', time: d.time || '', label: d.label || '', memo: d.memo || '', order: i }; });
+    doc.names = {};
+    (s.names || []).forEach(function (n, i) { doc.names[n.id] = { name: n.name || '', favorite: !!n.favorite, memo: n.memo || '', hanja: (n.hanja || []).map(function (h) { return { id: h.id || '', chars: h.chars || '', meaning: h.meaning || '' }; }), dateIds: (n.dateIds || []).slice(), order: i }; });
     return doc;
   }
 
@@ -111,20 +116,22 @@
         return { id: it.id, categoryId: it.categoryId, name: it.name, qty: it.qty === undefined ? null : it.qty, unit: it.unit || '', memo: it.memo || '', done: it.done === true, excluded: it.excluded === true };
       }),
       notes: Object.keys(doc.notes || {}).map(function (id) { var n = doc.notes[id] || {}; return { id: id, date: n.date || '', title: n.title || '', body: n.body || '' }; }),
+      dates: sortedEntries(doc.dates).map(function (d) { return { id: d.id, date: d.date || '', time: d.time || '', label: d.label || '', memo: d.memo || '' }; }),
+      names: sortedEntries(doc.names).map(function (n) { return { id: n.id, name: n.name || '', favorite: n.favorite === true, memo: n.memo || '', hanja: asArr(n.hanja).map(function (h) { return { id: (h && h.id) || '', chars: (h && h.chars) || '', meaning: (h && h.meaning) || '' }; }), dateIds: asArr(n.dateIds).filter(function (x) { return typeof x === 'string'; }) }; }),
       highlights: typeof doc.highlights === 'string' ? doc.highlights : '',
       picks: { gpt: (doc.picks && typeof doc.picks.gpt === 'string') ? doc.picks.gpt : '', claude: (doc.picks && typeof doc.picks.claude === 'string') ? doc.picks.claude : '' }
     };
   }
 
   function isEmptyDoc(doc) {
-    return !doc || (!Object.keys(doc.categories || {}).length && !Object.keys(doc.items || {}).length && !Object.keys(doc.notes || {}).length && !doc.highlights);
+    return !doc || (!Object.keys(doc.categories || {}).length && !Object.keys(doc.items || {}).length && !Object.keys(doc.notes || {}).length && !Object.keys(doc.dates || {}).length && !Object.keys(doc.names || {}).length && !doc.highlights && !(doc.picks && (doc.picks.gpt || doc.picks.claude)));
   }
 
   // Multi-path update: only entities that changed, null for removed ones.
   function diff(prev, next) {
     var updates = {};
     prev = prev || { categories: {}, items: {}, notes: {}, highlights: '' };
-    ['categories', 'items', 'notes'].forEach(function (group) {
+    ['categories', 'items', 'notes', 'dates', 'names'].forEach(function (group) {
       var a = prev[group] || {}, b = next[group] || {};
       Object.keys(b).forEach(function (id) {
         if (!a[id] || JSON.stringify(a[id]) !== JSON.stringify(b[id])) updates[group + '/' + id] = b[id];
