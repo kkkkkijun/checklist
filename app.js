@@ -250,7 +250,7 @@
 
   /* ---------- state ---------- */
   var state;
-  var ui = { filter: 'all', editMode: false, pendingUndo: null, undoTimer: null, collapsed: {}, noteForm: null, qtyEdit: null, highlightEdit: false, activeCategory: null, highlightsCollapsed: false, itemEdit: null };
+  var ui = { filter: 'all', editMode: false, pendingUndo: null, undoTimer: null, collapsed: {}, noteForm: null, qtyEdit: null, highlightEdit: false, activeCategory: null, highlightsCollapsed: false, itemEdit: null, view: 'checklist' };
 
   // Active tab (narrow screens): falls back to the first category when the saved one is gone.
   function activeCategoryId() {
@@ -282,6 +282,7 @@
         if (parsed.collapsed && typeof parsed.collapsed === 'object') ui.collapsed = parsed.collapsed;
         if (typeof parsed.activeCategory === 'string') ui.activeCategory = parsed.activeCategory;
         ui.highlightsCollapsed = parsed.highlightsCollapsed === true;
+        if (parsed.view === 'checklist' || parsed.view === 'notes') ui.view = parsed.view;
       }
     } catch (e) { /* UI preferences are optional */ }
   }
@@ -294,6 +295,7 @@
       window.localStorage.setItem(UI_KEY, JSON.stringify({
         collapsed: ui.collapsed,
         activeCategory: ui.activeCategory,
+        view: ui.view,
         highlightsCollapsed: ui.highlightsCollapsed
       }));
     } catch (e) { /* ignore */ }
@@ -371,8 +373,39 @@
     return null;
   }
 
+  function setView(view) {
+    if (view !== 'checklist' && view !== 'notes') return;
+    if (ui.view === view) return;
+    ui.view = view;
+    ui.qtyEdit = null;
+    ui.itemEdit = null;
+    saveUiPrefs();
+    render();
+    var content = document.getElementById(view === 'notes' ? 'view-notes' : 'view-checklist');
+    if (content) { var h = content.querySelector('h2'); if (h) h.setAttribute('tabindex', '-1'); }
+  }
+
+  function renderPrimaryTabs() {
+    var p = computeProgress(state.items);
+    document.body.classList.toggle('is-notes-view', ui.view === 'notes');
+    var cCount = $('#ptab-checklist-count');
+    if (cCount) cCount.textContent = p.total ? p.done + '/' + p.total : '';
+    var nCount = $('#ptab-notes-count');
+    if (nCount) nCount.textContent = state.notes.length ? String(state.notes.length) : '';
+    Array.prototype.forEach.call(document.querySelectorAll('.primary-tab'), function (btn) {
+      var active = btn.dataset.view === ui.view;
+      btn.classList.toggle('is-active', active);
+      btn.setAttribute('aria-selected', active ? 'true' : 'false');
+      btn.tabIndex = active ? 0 : -1;
+    });
+    var vc = $('#view-checklist'), vn = $('#view-notes');
+    if (vc) vc.hidden = ui.view !== 'checklist';
+    if (vn) vn.hidden = ui.view !== 'notes';
+  }
+
   function render() {
     var activeKey = focusKeyOf(document.activeElement);
+    renderPrimaryTabs();
     renderOverall();
     renderTabs();
     renderCategories();
@@ -1190,6 +1223,21 @@
     });
     if (window.ChecklistSync) window.ChecklistSync.onStatus(function () { renderSharePanel(); });
     renderSharePanel();
+
+    var ptabs = $('#primary-tabs');
+    if (ptabs) {
+      ptabs.addEventListener('click', function (e) {
+        var btn = e.target.closest('.primary-tab');
+        if (btn) setView(btn.dataset.view);
+      });
+      ptabs.addEventListener('keydown', function (e) {
+        if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+        e.preventDefault();
+        setView(ui.view === 'checklist' ? 'notes' : 'checklist');
+        var active = ptabs.querySelector('.primary-tab.is-active');
+        if (active) active.focus();
+      });
+    }
   }
 
   /* ---------- event wiring ---------- */
@@ -1326,7 +1374,7 @@
       }
     });
 
-    var notesRoot = $('#notes');
+    var notesRoot = $('#view-notes');
     $('#add-note-btn').addEventListener('click', function () {
       ui.noteForm = 'new';
       renderNotes();

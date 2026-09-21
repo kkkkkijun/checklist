@@ -67,7 +67,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 }
 .app-header__title { flex: 1 1 auto; min-width: 0; }
 
-.app-title { font-size: 1.5rem; margin: 0; line-height: 1.25; }
+.app-title { font-size: 1.35rem; margin: 0; line-height: 1.25; letter-spacing: -0.01em; }
 
 .save-status { margin: 0; font-size: 0.8rem; color: var(--muted); }
 .save-status.is-error { color: var(--danger); font-weight: 600; }
@@ -146,6 +146,39 @@ button, input, select, textarea { font: inherit; color: inherit; }
   width: 100%; min-height: 120px; padding: 10px 12px; border: 1px solid var(--border);
   border-radius: 10px; background: #fff; resize: vertical; line-height: 1.5;
 }
+
+/* ---------- 상위 탭 (준비물 / 진료 메모) ---------- */
+.primary-tabs {
+  display: flex; gap: 4px; margin: 4px 0 0; justify-content: center;
+  background: var(--peach-soft); border-radius: 12px; padding: 4px;
+}
+.primary-tab {
+  flex: 0 1 auto; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 44px; padding: 0 16px; border: 0; background: none; border-radius: 9px;
+  cursor: pointer; color: var(--muted); font-weight: 600; font-size: 0.95rem; white-space: nowrap;
+}
+.primary-tab__icon { font-size: 1.1em; line-height: 1; }
+.primary-tab__label { overflow: hidden; text-overflow: ellipsis; }
+.primary-tab__count {
+  font-size: 0.72rem; font-weight: 700; color: var(--muted);
+  background: rgba(0,0,0,0.06); border-radius: 999px; padding: 1px 7px; min-width: 18px; text-align: center;
+}
+.primary-tab__count:empty { display: none; }
+.primary-tab.is-active {
+  background: var(--card); color: var(--peach-strong);
+  box-shadow: 0 1px 2px rgba(80,50,30,0.12);
+}
+.primary-tab.is-active .primary-tab__count { color: var(--peach-strong); background: var(--peach-soft); }
+
+.view { margin: 0; }
+.primary-tabs + .share,
+.primary-tabs + .paste-import { margin-top: 12px; }
+
+/* checklist-only header controls hide when viewing notes */
+body.is-notes-view #edit-mode-toggle,
+body.is-notes-view #add-category-btn { display: none; }
+
+#view-checklist .progress-card { margin-top: 12px; }
 
 /* ---------- Filter bar (sticky) ---------- */
 .toolbar {
@@ -411,7 +444,8 @@ input[type="number"] { -moz-appearance: textfield; }
 .add-item-form .btn { flex-shrink: 0; }
 
 /* ---------- 진료 메모 ---------- */
-.notes { margin-top: 24px; }
+.notes { margin-top: 0; }
+#view-notes { margin-top: 14px; }
 .notes__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .notes__title { font-size: 1.15rem; margin: 0; min-width: 0; }
 .notes__count { font-size: 0.85rem; font-weight: 500; color: var(--muted); margin-left: 4px; }
@@ -480,6 +514,10 @@ input[type="date"] {
   .filter-option { flex: 1; }
   .filter-option span { width: 100%; padding: 0 4px; }
   .toolbar__actions { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; flex-basis: 100%; }
+  .primary-tabs { gap: 3px; }
+  .primary-tab { flex: 1 1 auto; padding: 0 8px; gap: 5px; }
+  .primary-tab__label { overflow: visible; }
+  .primary-tab__count { display: none; }
   .toolbar__actions .btn { width: 100%; padding: 0 6px; }
   .menu__panel { left: auto; right: 0; width: max-content; max-width: calc(100vw - 24px); }
   .item__actions .field { flex-basis: 100%; }
