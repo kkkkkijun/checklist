@@ -83,7 +83,7 @@
   /* ---------- state <-> remote document ---------- */
   // Remote layout: { version, categories:{id:{name,icon,order}}, items:{id:{...,order}}, notes:{id:{...}}, highlights }
   function docFromState(s) {
-    var doc = { version: s.version || 1, categories: {}, items: {}, notes: {}, highlights: s.highlights || '' };
+    var doc = { version: s.version || 1, categories: {}, items: {}, notes: {}, highlights: s.highlights || '', picks: { gpt: (s.picks && s.picks.gpt) || '', claude: (s.picks && s.picks.claude) || '' } };
     s.categories.forEach(function (c, i) { doc.categories[c.id] = { name: c.name, icon: c.icon || '', order: i }; });
     s.items.forEach(function (it, i) {
       doc.items[it.id] = { categoryId: it.categoryId, name: it.name, qty: it.qty === null || it.qty === undefined ? null : it.qty, unit: it.unit || '', memo: it.memo || '', done: !!it.done, excluded: !!it.excluded, order: i };
@@ -111,7 +111,8 @@
         return { id: it.id, categoryId: it.categoryId, name: it.name, qty: it.qty === undefined ? null : it.qty, unit: it.unit || '', memo: it.memo || '', done: it.done === true, excluded: it.excluded === true };
       }),
       notes: Object.keys(doc.notes || {}).map(function (id) { var n = doc.notes[id] || {}; return { id: id, date: n.date || '', title: n.title || '', body: n.body || '' }; }),
-      highlights: typeof doc.highlights === 'string' ? doc.highlights : ''
+      highlights: typeof doc.highlights === 'string' ? doc.highlights : '',
+      picks: { gpt: (doc.picks && typeof doc.picks.gpt === 'string') ? doc.picks.gpt : '', claude: (doc.picks && typeof doc.picks.claude === 'string') ? doc.picks.claude : '' }
     };
   }
 
@@ -131,6 +132,7 @@
       Object.keys(a).forEach(function (id) { if (!b[id]) updates[group + '/' + id] = null; });
     });
     if ((prev.highlights || '') !== (next.highlights || '')) updates.highlights = next.highlights || '';
+    if (JSON.stringify(prev.picks || {}) !== JSON.stringify(next.picks || {})) updates.picks = next.picks || { gpt: '', claude: '' };
     if (prev.version !== next.version) updates.version = next.version;
     return updates;
   }

@@ -6,7 +6,7 @@
   <meta name="description" content="출산가방 준비물을 확인하고 수량을 기록하며 가방에 담은 물품을 체크하는 체크리스트">
   <meta name="theme-color" content="#fff8f2">
   <title>내여보💜 출산가방 체크리스트</title>
-  <link rel="stylesheet" href="./style.css?v=20260921a">
+  <link rel="stylesheet" href="./style.css?v=20260921b">
 </head>
 <body>
   <a class="skip-link" href="#categories">본문으로 건너뛰기</a>
@@ -62,6 +62,11 @@
       <span class="primary-tab__icon" aria-hidden="true">🏥</span>
       <span class="primary-tab__label">산부인과 진료 메모</span>
       <span class="primary-tab__count" id="ptab-notes-count"></span>
+    </button>
+    <button type="button" class="primary-tab" data-view="picks" role="tab" aria-selected="false" aria-controls="view-picks" id="ptab-picks" tabindex="-1">
+      <span class="primary-tab__icon" aria-hidden="true">📅</span>
+      <span class="primary-tab__label">택일 정보</span>
+      <span class="primary-tab__count" id="ptab-picks-count"></span>
     </button>
   </nav>
 
@@ -130,6 +135,24 @@
     <ul class="notes-list" id="notes-list"></ul>
   </section>
 
+  <section id="view-picks" class="view picks" role="tabpanel" aria-labelledby="ptab-picks" hidden>
+    <p class="notice picks__hint">GPT와 Claude에게 받은 택일 정보를 각각 붙여넣어 보관하세요. 준비물·진료 메모와 함께 이 기기에 저장되고 백업·가족 공유에도 포함됩니다.</p>
+    <article class="pick" data-pick="gpt">
+      <div class="pick__head">
+        <h2 class="pick__title"><span class="pick__badge pick__badge--gpt">GPT</span> 가 알려준 택일</h2>
+        <button type="button" class="btn btn--small" data-action="edit-pick">수정</button>
+      </div>
+      <div class="pick__body"></div>
+    </article>
+    <article class="pick" data-pick="claude">
+      <div class="pick__head">
+        <h2 class="pick__title"><span class="pick__badge pick__badge--claude">Claude</span> 가 알려준 택일</h2>
+        <button type="button" class="btn btn--small" data-action="edit-pick">수정</button>
+      </div>
+      <div class="pick__body"></div>
+    </article>
+  </section>
+
   <footer class="app-footer">
     <p class="notice">기록은 이 기기의 브라우저에 저장됩니다. 브라우저 데이터를 삭제하면 기록이 사라질 수 있으니 <strong>백업</strong> 메뉴에서 JSON으로 내보내 두세요. 여러 기기에서 함께 쓰려면 <strong>가족 공유</strong>를 사용하세요.</p>
   </footer>
@@ -140,8 +163,8 @@
     <button type="button" class="toast__close" id="toast-close" aria-label="알림 닫기">×</button>
   </div>
 
-  <script src="./firebase-config.js?v=20260921a"></script>
-  <script src="./app.js?v=20260921a"></script>
-  <script src="./sync.js?v=20260921a"></script>
+  <script src="./firebase-config.js?v=20260921b"></script>
+  <script src="./app.js?v=20260921b"></script>
+  <script src="./sync.js?v=20260921b"></script>
 </body>
 </html>

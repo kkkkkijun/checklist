@@ -11,6 +11,20 @@
   var ICON_MAX = 16; // UTF-16 code units; enough for one multi-codepoint emoji
   var NOTE_MAX = 5000;
   var HIGHLIGHT_MAX = 2000;
+  var PICK_MAX = 8000;
+  var PICK_KEYS = ['gpt', 'claude'];
+  function pickLabel(key) { return key === 'gpt' ? 'GPT' : 'Claude'; }
+  function cleanPickText(text) {
+    return String(text == null ? '' : text).replace(/\r\n?/g, '\n').replace(/\n{4,}/g, '\n\n\n').trim().slice(0, PICK_MAX);
+  }
+  function emptyPicks() { return { gpt: '', claude: '' }; }
+  function normalizePicks(raw) {
+    var picks = emptyPicks();
+    if (raw && typeof raw === 'object') {
+      PICK_KEYS.forEach(function (k) { if (typeof raw[k] === 'string') picks[k] = cleanPickText(raw[k]); });
+    }
+    return picks;
+  }
 
   // One line per point; leading bullet characters are stripped so pasted lists render cleanly.
   function cleanHighlights(text) {
@@ -87,7 +101,7 @@
         items.push({ id: uid(), categoryId: cid, name: name, qty: null, unit: '', memo: '', done: false, excluded: false });
       });
     });
-    return { version: DATA_VERSION, categories: categories, items: items, notes: [], highlights: '' };
+    return { version: DATA_VERSION, categories: categories, items: items, notes: [], highlights: '', picks: emptyPicks() };
   }
 
   // Validates and normalises an unknown object into app state. Returns { ok, data, error }.
@@ -168,7 +182,8 @@
       }
     }
     var highlights = typeof raw.highlights === 'string' ? cleanHighlights(raw.highlights) : '';
-    return { ok: true, migrated: migrated, data: { version: DATA_VERSION, categories: categories, items: items, notes: notes, highlights: highlights } };
+    var picks = normalizePicks(raw.picks);
+    return { ok: true, migrated: migrated, data: { version: DATA_VERSION, categories: categories, items: items, notes: notes, highlights: highlights, picks: picks } };
   }
 
   /* ---------- storage ---------- */
@@ -250,7 +265,7 @@
 
   /* ---------- state ---------- */
   var state;
-  var ui = { filter: 'all', editMode: false, pendingUndo: null, undoTimer: null, collapsed: {}, noteForm: null, qtyEdit: null, highlightEdit: false, activeCategory: null, highlightsCollapsed: false, itemEdit: null, view: 'checklist' };
+  var ui = { filter: 'all', editMode: false, pendingUndo: null, undoTimer: null, collapsed: {}, noteForm: null, qtyEdit: null, highlightEdit: false, activeCategory: null, highlightsCollapsed: false, itemEdit: null, view: 'checklist', picksEdit: null };
 
   // Active tab (narrow screens): falls back to the first category when the saved one is gone.
   function activeCategoryId() {
@@ -282,7 +297,7 @@
         if (parsed.collapsed && typeof parsed.collapsed === 'object') ui.collapsed = parsed.collapsed;
         if (typeof parsed.activeCategory === 'string') ui.activeCategory = parsed.activeCategory;
         ui.highlightsCollapsed = parsed.highlightsCollapsed === true;
-        if (parsed.view === 'checklist' || parsed.view === 'notes') ui.view = parsed.view;
+        if (parsed.view === 'checklist' || parsed.view === 'notes' || parsed.view === 'picks') ui.view = parsed.view;
       }
     } catch (e) { /* UI preferences are optional */ }
   }
@@ -374,7 +389,7 @@
   }
 
   function setView(view) {
-    if (view !== 'checklist' && view !== 'notes') return;
+    if (view !== 'checklist' && view !== 'notes' && view !== 'picks') return;
     if (ui.view === view) return;
     ui.view = view;
     ui.qtyEdit = null;
@@ -387,20 +402,24 @@
 
   function renderPrimaryTabs() {
     var p = computeProgress(state.items);
-    document.body.classList.toggle('is-notes-view', ui.view === 'notes');
+    document.body.classList.toggle('is-checklist-view', ui.view === 'checklist');
     var cCount = $('#ptab-checklist-count');
     if (cCount) cCount.textContent = p.total ? p.done + '/' + p.total : '';
     var nCount = $('#ptab-notes-count');
     if (nCount) nCount.textContent = state.notes.length ? String(state.notes.length) : '';
+    var pkFilled = PICK_KEYS.filter(function (k) { return state.picks && state.picks[k]; }).length;
+    var pkCount = $('#ptab-picks-count');
+    if (pkCount) pkCount.textContent = pkFilled ? String(pkFilled) : '';
     Array.prototype.forEach.call(document.querySelectorAll('.primary-tab'), function (btn) {
       var active = btn.dataset.view === ui.view;
       btn.classList.toggle('is-active', active);
       btn.setAttribute('aria-selected', active ? 'true' : 'false');
       btn.tabIndex = active ? 0 : -1;
     });
-    var vc = $('#view-checklist'), vn = $('#view-notes');
+    var vc = $('#view-checklist'), vn = $('#view-notes'), vp = $('#view-picks');
     if (vc) vc.hidden = ui.view !== 'checklist';
     if (vn) vn.hidden = ui.view !== 'notes';
+    if (vp) vp.hidden = ui.view !== 'picks';
   }
 
   function render() {
@@ -410,6 +429,7 @@
     renderTabs();
     renderCategories();
     renderNotes();
+    renderPicks();
     renderHighlights();
     Array.prototype.forEach.call(document.querySelectorAll('[data-edit-toggle]'), function (b) {
       b.setAttribute('aria-pressed', ui.editMode ? 'true' : 'false');
@@ -747,6 +767,42 @@
     });
   }
 
+  /* ---------- 택일 정보 (GPT / Claude) ---------- */
+  function renderPicks() {
+    PICK_KEYS.forEach(function (key) {
+      var card = document.querySelector('[data-pick="' + key + '"]');
+      if (!card) return;
+      var body = $('.pick__body', card);
+      var editBtn = $('[data-action="edit-pick"]', card);
+      var text = (state.picks && state.picks[key]) || '';
+      if (ui.picksEdit === key) {
+        editBtn.hidden = true;
+        body.innerHTML = '<form class="pick-form" data-pick-form="' + key + '">' +
+          '<label class="visually-hidden" for="pick-input-' + key + '">' + pickLabel(key) + '이(가) 알려준 택일 정보</label>' +
+          '<textarea id="pick-input-' + key + '" rows="10" maxlength="' + PICK_MAX + '" data-focus-key="pick-input:' + key + '" placeholder="' + pickLabel(key) + '에게 받은 택일 정보를 붙여넣으세요.">' + escapeHtml(text) + '</textarea>' +
+          '<div class="note-form__actions"><button type="submit" class="btn btn--primary btn--small">저장</button>' +
+          '<button type="button" class="btn btn--small" data-action="cancel-pick">취소</button></div></form>';
+        return;
+      }
+      editBtn.hidden = false;
+      editBtn.textContent = text ? '수정' : '붙여넣기';
+      body.innerHTML = text
+        ? '<div class="pick__text">' + escapeHtml(text) + '</div>'
+        : '<p class="pick__empty">' + pickLabel(key) + '에게 받은 택일 정보를 여기에 붙여넣으세요.</p>';
+    });
+  }
+
+  function savePick(key, text) {
+    if (PICK_KEYS.indexOf(key) === -1) return;
+    if (!state.picks) state.picks = emptyPicks();
+    state.picks[key] = cleanPickText(text);
+    ui.picksEdit = null;
+    commit();
+    showToast(state.picks[key] ? (pickLabel(key) + ' 택일 정보를 저장했습니다.') : (pickLabel(key) + ' 택일 정보를 비웠습니다.'));
+    var eb = document.querySelector('[data-pick="' + key + '"] [data-action="edit-pick"]');
+    if (eb) eb.focus();
+  }
+
   /* ---------- 꼭 기억하기 (상단 고정) ---------- */
   function renderHighlights() {
     var box = $('#highlights-body');
@@ -1006,7 +1062,8 @@
       categories: state.categories,
       items: state.items,
       notes: state.notes,
-      highlights: state.highlights
+      highlights: state.highlights,
+      picks: state.picks
     }, null, pretty ? 2 : 0);
   }
 
@@ -1086,7 +1143,7 @@
     if (el.readOnly || el.disabled) return false; // readonly share-link etc. must not block sync
     if (el.type === 'checkbox' || el.type === 'radio' || el.type === 'file' || el.type === 'button') return false;
     // Only editable fields inside an item/note/highlights editor should defer a remote update.
-    return !!el.closest('.item--edit, .is-qty-editing, .note-form, #highlights-form, #add-category-form');
+    return !!el.closest('.item--edit, .is-qty-editing, .note-form, #highlights-form, #add-category-form, .pick-form');
   }
 
   function applyRemote(remoteState) {
@@ -1402,6 +1459,33 @@
         case 'delete-note': deleteNote(li.dataset.noteId); break;
       }
     });
+
+    var picksRoot = $('#view-picks');
+    if (picksRoot) {
+      picksRoot.addEventListener('click', function (e) {
+        var btn = e.target.closest('button[data-action]');
+        if (!btn) return;
+        var card = btn.closest('[data-pick]');
+        var key = card && card.dataset.pick;
+        if (btn.dataset.action === 'edit-pick') {
+          ui.picksEdit = key;
+          renderPicks();
+          var ta = document.querySelector('[data-focus-key="pick-input:' + key + '"]');
+          if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+        } else if (btn.dataset.action === 'cancel-pick') {
+          ui.picksEdit = null;
+          renderPicks();
+          var eb = document.querySelector('[data-pick="' + key + '"] [data-action="edit-pick"]');
+          if (eb) eb.focus();
+        }
+      });
+      picksRoot.addEventListener('submit', function (e) {
+        var form = e.target.closest('form[data-pick-form]');
+        if (!form) return;
+        e.preventDefault();
+        savePick(form.dataset.pickForm, form.querySelector('textarea').value);
+      });
+    }
 
     var root = $('#categories');
 

@@ -151,7 +151,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .primary-tabs {
   display: flex; gap: 4px; margin: 4px 0 0; justify-content: center;
   background: var(--peach-soft); border-radius: 12px; padding: 4px;
+  overflow-x: auto; scrollbar-width: none;
 }
+.primary-tabs::-webkit-scrollbar { display: none; }
 .primary-tab {
   flex: 0 1 auto; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 6px;
   min-height: 44px; padding: 0 16px; border: 0; background: none; border-radius: 9px;
@@ -175,8 +177,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .primary-tabs + .paste-import { margin-top: 12px; }
 
 /* checklist-only header controls hide when viewing notes */
-body.is-notes-view #edit-mode-toggle,
-body.is-notes-view #add-category-btn { display: none; }
+body:not(.is-checklist-view) #edit-mode-toggle,
+body:not(.is-checklist-view) #add-category-btn { display: none; }
 
 #view-checklist .progress-card { margin-top: 12px; }
 
@@ -443,6 +445,21 @@ input[type="number"] { -moz-appearance: textfield; }
 .add-item-form { margin-top: 8px; }
 .add-item-form .btn { flex-shrink: 0; }
 
+/* ---------- 택일 정보 ---------- */
+#view-picks { margin-top: 14px; }
+.picks__hint { margin: 0 0 12px; }
+.pick { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 12px 14px; margin-bottom: 12px; }
+.pick__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.pick__title { font-size: 1rem; margin: 0; font-weight: 600; }
+.pick__badge { display: inline-block; font-size: 0.78rem; font-weight: 700; padding: 3px 9px; border-radius: 999px; }
+.pick__badge--gpt { background: #e1f0ec; color: #0f6e56; }
+.pick__badge--claude { background: #f6e9df; color: #9a5b2a; }
+.pick__body { margin-top: 8px; }
+.pick__text { white-space: pre-wrap; line-height: 1.6; font-size: 0.95rem; }
+.pick__empty { margin: 0; color: var(--muted); font-size: 0.88rem; }
+.pick-form { display: grid; gap: 8px; }
+.pick-form textarea { width: 100%; min-height: 200px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: #fff; resize: vertical; line-height: 1.55; font-size: 0.9rem; }
+
 /* ---------- 진료 메모 ---------- */
 .notes { margin-top: 0; }
 #view-notes { margin-top: 14px; }
@@ -514,9 +531,8 @@ input[type="date"] {
   .filter-option { flex: 1; }
   .filter-option span { width: 100%; padding: 0 4px; }
   .toolbar__actions { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; flex-basis: 100%; }
-  .primary-tabs { gap: 3px; }
-  .primary-tab { flex: 1 1 auto; padding: 0 8px; gap: 5px; }
-  .primary-tab__label { overflow: visible; }
+  .primary-tabs { gap: 2px; justify-content: flex-start; }
+  .primary-tab { flex: 0 0 auto; padding: 0 9px; gap: 4px; font-size: 0.9rem; }
   .primary-tab__count { display: none; }
   .toolbar__actions .btn { width: 100%; padding: 0 6px; }
   .menu__panel { left: auto; right: 0; width: max-content; max-width: calc(100vw - 24px); }
