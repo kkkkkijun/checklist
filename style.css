@@ -177,7 +177,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 /* ---------- Category tabs (narrow screens only) ---------- */
 .category-tabs {
-  display: none; gap: 6px; width: 100%;
+  display: flex; gap: 6px; width: 100%;
   overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none;
   padding: 2px 2px 4px; margin: 0 -2px;
 }
@@ -193,14 +193,12 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .category-tab.is-active { background: var(--peach-strong); border-color: var(--peach-strong); color: #fff; }
 .category-tab.is-active .category-tab__count { color: rgba(255,255,255,0.9); }
 .category-tab--add { min-width: 40px; padding: 0 12px; font-size: 1.2rem; line-height: 1; color: var(--peach-strong); border-style: dashed; }
-@media (max-width: 639px) {
-  .category-tabs { display: flex; }
-  .category:not(.is-active) { display: none; }
-  .category__toggle { pointer-events: none; }
-  .category__toggle .category__chevron { display: none; }
-  .is-collapsed .category__body { display: block !important; }
-  .is-collapsed .category__progress { margin-bottom: 8px; }
-}
+.category:not(.is-active) { display: none; }
+.category__toggle { pointer-events: none; cursor: default; }
+.category__toggle:hover { color: inherit; }
+.category__toggle .category__chevron { display: none; }
+.is-collapsed .category__body { display: block !important; }
+.is-collapsed .category__progress { margin-bottom: 8px; }
 
 /* ---------- Buttons ---------- */
 .btn {
@@ -272,8 +270,7 @@ input[type="number"] { -moz-appearance: textfield; }
   gap: 12px;
   align-items: start;
 }
-@media (min-width: 640px) { .categories { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; } }
-@media (min-width: 960px) { .categories { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+/* tabs show one category at a time, so the grid stays single-column on every width */
 
 .empty-state {
   grid-column: 1 / -1;

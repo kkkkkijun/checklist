@@ -1049,9 +1049,11 @@
     var el = document.activeElement;
     if (!el) return false;
     var tag = el.tagName;
-    if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') return false;
-    if (el.type === 'checkbox' || el.type === 'radio' || el.type === 'file') return false;
-    return true;
+    if (tag !== 'INPUT' && tag !== 'TEXTAREA') return false;
+    if (el.readOnly || el.disabled) return false; // readonly share-link etc. must not block sync
+    if (el.type === 'checkbox' || el.type === 'radio' || el.type === 'file' || el.type === 'button') return false;
+    // Only editable fields inside an item/note/highlights editor should defer a remote update.
+    return !!el.closest('.item--edit, .is-qty-editing, .note-form, #highlights-form, #add-category-form');
   }
 
   function applyRemote(remoteState) {
