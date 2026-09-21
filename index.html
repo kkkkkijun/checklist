@@ -6,6 +6,15 @@
   <meta name="description" content="출산가방 준비물을 확인하고 수량을 기록하며 가방에 담은 물품을 체크하는 체크리스트">
   <meta name="theme-color" content="#fff8f2">
   <title>내여보💜 출산가방 체크리스트</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="./favicon-32.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
+  <link rel="apple-touch-icon" href="./apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="내여보 출산가방">
+  <meta name="mobile-web-app-capable" content="yes">
   <link rel="stylesheet" href="./style.css?v=20260921e">
 </head>
 <body>
@@ -170,5 +179,12 @@
   <script src="./firebase-config.js?v=20260921e"></script>
   <script src="./app.js?v=20260921e"></script>
   <script src="./sync.js?v=20260921e"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('./sw.js').catch(function () { /* SW optional; app works without it */ });
+      });
+    }
+  </script>
 </body>
 </html>
