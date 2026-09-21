@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="description" content="출산가방 준비물을 확인하고 수량을 기록하며 가방에 담은 물품을 체크하는 체크리스트">
   <meta name="theme-color" content="#fff8f2">
-  <title>내여보💜 출산가방 체크리스트</title>
+  <title>마미백 · 출산가방 체크리스트</title>
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" href="./favicon.ico" sizes="any">
   <link rel="icon" type="image/png" sizes="32x32" href="./favicon-32.png">
@@ -15,7 +15,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="마미백">
   <meta name="mobile-web-app-capable" content="yes">
-  <link rel="stylesheet" href="./style.css?v=20260921f">
+  <link rel="stylesheet" href="./style.css?v=20260921g">
 </head>
 <body>
   <a class="skip-link" href="#categories">본문으로 건너뛰기</a>
@@ -25,7 +25,7 @@
       <div class="app-header__title">
         <div class="app-title-row">
           <button type="button" class="home-btn" id="home-btn" aria-label="홈으로 (처음 화면으로 이동)" title="홈으로"><span aria-hidden="true">🏠</span></button>
-          <h1 class="app-title">내여보💜 출산가방 체크리스트</h1>
+          <h1 class="app-title">마미백 💜 출산가방 체크리스트</h1>
         </div>
         <p class="save-status" id="save-status" role="status" aria-live="polite"></p>
         <p class="sync-status" id="sync-status" role="status" aria-live="polite" hidden></p>
@@ -42,6 +42,8 @@
             <hr class="menu__sep">
             <button type="button" class="menu__item" id="copy-text-btn">텍스트로 복사 (다른 기기로 옮기기)</button>
             <button type="button" class="menu__item" id="paste-text-btn">텍스트 붙여넣어 불러오기</button>
+            <hr class="menu__sep">
+            <button type="button" class="menu__item menu__item--danger" id="reset-btn">기본 목록으로 초기화</button>
             <input type="file" id="import-file" accept="application/json,.json" class="visually-hidden" tabindex="-1" aria-hidden="true">
             <p class="menu__help">불러오기는 현재 목록을 통째로 교체합니다. 기기 간 옮길 때는 ‘텍스트로 복사’ 후 메신저로 보내고, 받은 기기에서 ‘붙여넣어 불러오기’를 쓰세요.</p>
           </div>
@@ -118,6 +120,13 @@
       </div>
       <p class="progress-hint">체크는 <strong>‘가방에 담기 완료’</strong>를 뜻합니다. 구매 여부와는 별개예요.</p>
     </section>
+
+    <div class="search" id="search-wrap">
+      <span class="search__icon" aria-hidden="true">🔍</span>
+      <label class="visually-hidden" for="item-search">준비물 검색</label>
+      <input type="search" id="item-search" placeholder="준비물 검색 (모든 분류에서 찾기)" autocomplete="off" enterkeyhint="search">
+      <button type="button" class="search__clear" id="search-clear" aria-label="검색어 지우기" hidden>×</button>
+    </div>
 
     <div class="toolbar">
       <fieldset class="filter-group" id="filter-group">
@@ -199,9 +208,9 @@
     <button type="button" class="toast__close" id="toast-close" aria-label="알림 닫기">×</button>
   </div>
 
-  <script src="./firebase-config.js?v=20260921f"></script>
-  <script src="./app.js?v=20260921f"></script>
-  <script src="./sync.js?v=20260921f"></script>
+  <script src="./firebase-config.js?v=20260921g"></script>
+  <script src="./app.js?v=20260921g"></script>
+  <script src="./sync.js?v=20260921g"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function () {

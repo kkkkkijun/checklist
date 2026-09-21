@@ -325,7 +325,7 @@
 
   /* ---------- state ---------- */
   var state;
-  var ui = { filter: 'all', editMode: false, pendingUndo: null, undoTimer: null, collapsed: {}, noteForm: null, qtyEdit: null, highlightEdit: false, activeCategory: null, highlightsCollapsed: false, itemEdit: null, view: 'checklist', picksEdit: null, picksActive: 'gpt', dateEdit: null, nameEdit: null };
+  var ui = { filter: 'all', editMode: false, pendingUndo: null, undoTimer: null, collapsed: {}, noteForm: null, qtyEdit: null, highlightEdit: false, activeCategory: null, highlightsCollapsed: false, itemEdit: null, view: 'checklist', picksEdit: null, picksActive: 'gpt', dateEdit: null, nameEdit: null, search: '' };
 
   // Active tab (narrow screens): falls back to the first category when the saved one is gone.
   function activeCategoryId() {
@@ -489,6 +489,18 @@
     if (vm) vm.hidden = ui.view !== 'names';
   }
 
+  function updateTabScroll(bar) {
+    if (!bar) return;
+    var scrollable = bar.scrollWidth > bar.clientWidth + 2;
+    bar.classList.toggle('is-scrollable', scrollable);
+    if (!scrollable) return;
+    var active = bar.querySelector('.is-active');
+    if (!active) return;
+    var al = active.offsetLeft, ar = al + active.offsetWidth;
+    if (al < bar.scrollLeft) bar.scrollLeft = Math.max(0, al - 8);
+    else if (ar > bar.scrollLeft + bar.clientWidth) bar.scrollLeft = ar - bar.clientWidth + 8;
+  }
+
   function render() {
     var activeKey = focusKeyOf(document.activeElement);
     renderPrimaryTabs();
@@ -500,6 +512,11 @@
     renderDates();
     renderNames();
     renderHighlights();
+    updateTabScroll($('#primary-tabs'));
+    updateTabScroll($('#category-tabs'));
+    updateTabScroll($('#pick-tabs'));
+    var searchBox = $('#search-wrap');
+    if (searchBox) searchBox.hidden = ui.editMode || ui.view !== 'checklist';
     Array.prototype.forEach.call(document.querySelectorAll('[data-edit-toggle]'), function (b) {
       b.setAttribute('aria-pressed', ui.editMode ? 'true' : 'false');
       b.textContent = ui.editMode ? '편집 완료' : (b.dataset.editToggle === 'short' ? '편집' : '편집 모드');
@@ -532,8 +549,51 @@
     });
   }
 
+  function searching() { return !ui.editMode && ui.view === 'checklist' && ui.search.trim() !== ''; }
+
+  function renderSearchResults(root, q) {
+    var needle = q.trim().toLowerCase();
+    var matches = [];
+    state.categories.forEach(function (cat) {
+      itemsOf(cat.id).forEach(function (it) {
+        if (it.name.toLowerCase().indexOf(needle) !== -1 && matchesFilter(it)) matches.push({ it: it, cat: cat });
+      });
+    });
+    var html = '<div class="search-results">';
+    html += '<p class="search-results__count">‘' + escapeHtml(q.trim()) + '’ 검색 결과 ' + matches.length + '개</p>';
+    if (!matches.length) {
+      html += '<p class="items-empty">일치하는 준비물이 없습니다.</p>';
+    } else {
+      html += '<ul class="items">' + matches.map(function (m) {
+        var it = m.it;
+        var cls = 'item search-item' + (it.done ? ' is-done' : '') + (it.excluded ? ' is-excluded' : '');
+        var meta = [];
+        if (it.qty !== null) meta.push('수량 ' + it.qty + (it.unit ? it.unit : ''));
+        var h = '<li class="' + cls + '" data-item-id="' + escapeHtml(it.id) + '"><div class="item__row"><label class="item__check">';
+        h += '<input type="checkbox" data-action="toggle-done"' + (it.done ? ' checked' : '') + (it.excluded ? ' disabled' : '') + ' aria-label="' + escapeHtml(it.name) + ' 가방에 담기 완료">';
+        h += '<span class="item__body"><span class="item__name">' + escapeHtml(it.name) + '</span>';
+        h += '<span class="badge badge--cat">' + (m.cat.icon ? escapeHtml(m.cat.icon) + ' ' : '') + escapeHtml(m.cat.name) + '</span>';
+        if (it.excluded) h += '<span class="badge badge--excluded">제외</span>';
+        else if (it.done) h += '<span class="badge badge--done">완료</span>';
+        if (meta.length) h += '<span class="item__meta">' + escapeHtml(meta.join(' · ')) + '</span>';
+        if (it.memo) h += '<span class="item__memo">' + escapeHtml(it.memo) + '</span>';
+        h += '</span></label></div></li>';
+        return h;
+      }).join('') + '</ul>';
+    }
+    html += '</div>';
+    root.innerHTML = html;
+  }
+
   function renderCategories() {
     var root = $('#categories');
+    var catTabs = $('#category-tabs');
+    if (searching()) {
+      if (catTabs) catTabs.hidden = true;
+      renderSearchResults(root, ui.search);
+      return;
+    }
+    if (catTabs) catTabs.hidden = false;
     if (state.categories.length === 0) {
       root.innerHTML = '<div class="empty-state"><p>분류가 없습니다.</p><p>상단의 <strong>분류 추가</strong> 버튼으로 다시 시작할 수 있어요.</p></div>';
       return;
@@ -573,6 +633,10 @@
       html += '<label class="visually-hidden" for="cat-name-' + escapeHtml(cat.id) + '">분류 이름</label>';
       html += '<input type="text" class="category__title-input" id="cat-name-' + escapeHtml(cat.id) + '" data-action="rename-category" data-focus-key="cat-name:' + escapeHtml(cat.id) + '" value="' + escapeHtml(cat.name) + '" maxlength="40" aria-labelledby="' + titleId + '">';
       html += '<h2 id="' + titleId + '" class="visually-hidden">' + escapeHtml(cat.name) + '</h2>';
+      var cidx = state.categories.indexOf(cat);
+      html += '<span class="reorder">';
+      html += '<button type="button" class="btn btn--small reorder__btn" data-action="cat-up"' + (cidx <= 0 ? ' disabled' : '') + ' aria-label="분류 위로">▲</button>';
+      html += '<button type="button" class="btn btn--small reorder__btn" data-action="cat-down"' + (cidx >= state.categories.length - 1 ? ' disabled' : '') + ' aria-label="분류 아래로">▼</button></span>';
       html += '<button type="button" class="btn btn--small btn--danger" data-action="delete-category" data-focus-key="cat-del:' + escapeHtml(cat.id) + '" aria-label="분류 ' + escapeHtml(cat.name) + ' 삭제">삭제</button>';
       html += '</div><div class="icon-presets" role="group" aria-label="' + escapeHtml(cat.name) + ' 아이콘 선택">';
       ICON_PRESETS.forEach(function (ic) {
@@ -678,7 +742,11 @@
       h += '<span class="item__body"><span class="item__name">' + escapeHtml(it.name) + '</span>' + badges;
       if (it.memo) h += '<span class="item__memo">' + escapeHtml(it.memo) + '</span>';
       h += '</span>';
+      var siblings = itemsOf(it.categoryId);
+      var pos = siblings.map(function (x) { return x.id; }).indexOf(it.id);
       h += '<span class="item__edit-btns">';
+      h += '<span class="reorder"><button type="button" class="btn btn--small reorder__btn" data-action="item-up" data-focus-key="iup:' + id + '"' + (pos <= 0 ? ' disabled' : '') + ' aria-label="' + escapeHtml(it.name) + ' 위로">▲</button>';
+      h += '<button type="button" class="btn btn--small reorder__btn" data-action="item-down" data-focus-key="idown:' + id + '"' + (pos >= siblings.length - 1 ? ' disabled' : '') + ' aria-label="' + escapeHtml(it.name) + ' 아래로">▼</button></span>';
       h += '<button type="button" class="btn btn--small" data-action="open-item-edit" data-focus-key="iedit:' + id + '" aria-label="' + escapeHtml(it.name) + ' 수정">수정</button>';
       h += '<button type="button" class="btn btn--small btn--danger" data-action="delete-item" data-focus-key="del:' + id + '" aria-label="' + escapeHtml(it.name) + ' 삭제">삭제</button>';
       h += '</span></div></li>';
@@ -930,6 +998,14 @@
     return h;
   }
 
+  function datesSorted() {
+    return state.dates.slice().sort(function (a, b) {
+      var ad = a.date || '9999-99-99', bd = b.date || '9999-99-99';
+      if (ad !== bd) return ad < bd ? -1 : 1;
+      return state.dates.indexOf(a) - state.dates.indexOf(b);
+    });
+  }
+
   function renderDates() {
     var list = $('#date-list');
     if (!list) return;
@@ -938,7 +1014,7 @@
     if (!state.dates.length && ui.dateEdit !== 'new') {
       html += '<li class="datecard-empty">아직 택일 후보가 없습니다. ‘후보 추가’로 날짜를 등록하면 작명 노트의 이름과 연결할 수 있어요.</li>';
     }
-    state.dates.forEach(function (d) {
+datesSorted().forEach(function (d) {
       if (ui.dateEdit === d.id) { html += '<li class="datecard datecard--editing" data-date-id="' + escapeHtml(d.id) + '">' + dateFormHtml(d) + '</li>'; return; }
       var linked = namesForDate(d.id);
       html += '<li class="datecard" data-date-id="' + escapeHtml(d.id) + '">';
@@ -1317,6 +1393,43 @@
     showToast(it.excluded ? '‘' + it.name + '’ 항목을 준비 대상에서 제외했습니다.' : '‘' + it.name + '’ 항목을 다시 포함했습니다.');
   }
 
+  function moveCategoryDir(id, dir) {
+    var i = -1; for (var k = 0; k < state.categories.length; k++) if (state.categories[k].id === id) i = k;
+    var j = i + dir;
+    if (i < 0 || j < 0 || j >= state.categories.length) return;
+    var tmp = state.categories[i]; state.categories[i] = state.categories[j]; state.categories[j] = tmp;
+    commit();
+  }
+
+  function moveItemDir(id, dir) {
+    var it = findItem(id);
+    if (!it) return;
+    var sib = itemsOf(it.categoryId);
+    var pos = sib.map(function (x) { return x.id; }).indexOf(id);
+    var target = sib[pos + dir];
+    if (!target) return;
+    var gi = state.items.indexOf(it), gj = state.items.indexOf(target);
+    var tmp = state.items[gi]; state.items[gi] = state.items[gj]; state.items[gj] = tmp;
+    commit();
+  }
+
+  function resetToDefault() {
+    var shared = !!(window.ChecklistSync && window.ChecklistSync.getState().roomId);
+    var msg = '현재 기록(준비물·진료 메모·택일·이름 등)을 모두 지우고 기본 목록으로 초기화합니다.';
+    if (shared) msg += '\n가족 공유 중이라 연결된 다른 기기에도 초기화가 반영됩니다.';
+    msg += '\n계속하기 전에 JSON 백업 파일이 자동으로 저장됩니다. 초기화할까요?';
+    if (!window.confirm(msg)) return;
+    try { exportJson(); } catch (e) { /* backup best-effort */ }
+    state = createDefaultState();
+    ui.activeCategory = null; ui.search = ''; ui.view = 'checklist';
+    ui.editMode = false; ui.itemEdit = null; ui.qtyEdit = null;
+    var sb = $('#item-search'); if (sb) sb.value = '';
+    var sc = $('#search-clear'); if (sc) sc.hidden = true;
+    saveUiPrefs();
+    commit();
+    showToast('기본 목록으로 초기화했습니다. 백업 파일이 저장되었습니다.');
+  }
+
   function moveItem(id, categoryId) {
     var it = findItem(id);
     if (!it || !findCategory(categoryId) || it.categoryId === categoryId) return;
@@ -1638,6 +1751,9 @@
     ui.qtyEdit = null;
     ui.itemEdit = null;
     ui.picksEdit = null;
+    ui.search = '';
+    var homeSearch = $('#item-search'); if (homeSearch) homeSearch.value = '';
+    var homeClear = $('#search-clear'); if (homeClear) homeClear.hidden = true;
     ui.noteForm = null;
     ui.highlightEdit = false;
     var allRadio = document.querySelector('#filter-group input[value="all"]');
@@ -1664,6 +1780,7 @@
         ui.editMode = !ui.editMode;
         ui.qtyEdit = null;
         ui.itemEdit = null;
+        if (ui.editMode) { ui.search = ''; var si = $('#item-search'); if (si) si.value = ''; var sc = $('#search-clear'); if (sc) sc.hidden = true; }
         render();
       });
     });
@@ -1698,6 +1815,14 @@
 
     $('#export-btn').addEventListener('click', function () { $('#backup-menu').open = false; exportJson(); });
     $('#import-btn').addEventListener('click', function () { $('#backup-menu').open = false; $('#import-file').click(); });
+    var searchInput = $('#item-search');
+    if (searchInput) {
+      searchInput.addEventListener('input', function () { ui.search = searchInput.value; renderCategories(); $('#search-clear').hidden = !ui.search; });
+      var clearBtn = $('#search-clear');
+      if (clearBtn) clearBtn.addEventListener('click', function () { ui.search = ''; searchInput.value = ''; clearBtn.hidden = true; searchInput.focus(); renderCategories(); });
+    }
+    var resetBtn = $('#reset-btn');
+    if (resetBtn) resetBtn.addEventListener('click', function () { $('#backup-menu').open = false; resetToDefault(); });
     $('#copy-text-btn').addEventListener('click', function () { $('#backup-menu').open = false; copyBackupText(); });
     $('#paste-text-btn').addEventListener('click', function () {
       $('#backup-menu').open = false;
@@ -1933,9 +2058,13 @@
       var row = btn.closest('[data-item-id]');
       switch (btn.dataset.action) {
         case 'delete-category': deleteCategory(card.dataset.categoryId); break;
+        case 'cat-up': moveCategoryDir(card.dataset.categoryId, -1); break;
+        case 'cat-down': moveCategoryDir(card.dataset.categoryId, 1); break;
         case 'toggle-collapse': toggleCollapsed(card.dataset.categoryId); break;
         case 'pick-icon': setCategoryIcon(card.dataset.categoryId, btn.dataset.icon || ''); break;
         case 'delete-item': deleteItem(row.dataset.itemId); break;
+        case 'item-up': { var uid_ = row.dataset.itemId; moveItemDir(uid_, -1); var fu = document.querySelector('[data-focus-key="iup:' + uid_ + '"]'); if (fu && !fu.disabled) fu.focus(); else { var du = document.querySelector('[data-focus-key="idown:' + uid_ + '"]'); if (du) du.focus(); } break; }
+        case 'item-down': { var did_ = row.dataset.itemId; moveItemDir(did_, 1); var fd = document.querySelector('[data-focus-key="idown:' + did_ + '"]'); if (fd && !fd.disabled) fd.focus(); else { var uu = document.querySelector('[data-focus-key="iup:' + did_ + '"]'); if (uu) uu.focus(); } break; }
         case 'toggle-excluded': toggleExcluded(row.dataset.itemId); break;
         case 'open-item-edit': {
           var oid = row.dataset.itemId;
