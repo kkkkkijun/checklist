@@ -1328,7 +1328,31 @@
   }
 
   /* ---------- event wiring ---------- */
+  function goHome() {
+    ui.view = 'checklist';
+    if (state.categories.length) ui.activeCategory = state.categories[0].id;
+    ui.filter = 'all';
+    ui.editMode = false;
+    ui.qtyEdit = null;
+    ui.itemEdit = null;
+    ui.picksEdit = null;
+    ui.noteForm = null;
+    ui.highlightEdit = false;
+    var allRadio = document.querySelector('#filter-group input[value="all"]');
+    if (allRadio) allRadio.checked = true;
+    var addForm = $('#add-category-form'); if (addForm) addForm.hidden = true;
+    var share = $('#share-panel'); if (share) share.hidden = true;
+    var paste = $('#paste-import'); if (paste) paste.hidden = true;
+    var menu = $('#backup-menu'); if (menu) menu.open = false;
+    saveUiPrefs();
+    render();
+    window.scrollTo(0, 0);
+  }
+
   function bindEvents() {
+    var homeBtn = $('#home-btn');
+    if (homeBtn) homeBtn.addEventListener('click', goHome);
+
     $('#filter-group').addEventListener('change', function (e) {
       if (e.target.name === 'filter') { ui.filter = e.target.value; render(); }
     });
