@@ -15,6 +15,9 @@
   var PICK_KEYS = ['gpt', 'claude'];
   var DATE_LABEL_MAX = 30, DATE_MEMO_MAX = 500, DATE_TIME_MAX = 30;
   var NAME_MAX = 30, NAME_MEMO_MAX = 500, HANJA_CHARS_MAX = 20, HANJA_MEANING_MAX = 120;
+  var MEMO_MAX = 5000;
+  var SUPPORT_STATUS = ['todo', 'applied', 'received', 'na'];
+  var SUPPORT_STATUS_LABEL = { todo: '확인 전', applied: '신청함', received: '받음', na: '해당 없음' };
   function asArray(v) {
     if (Array.isArray(v)) return v;
     if (v && typeof v === 'object') return Object.keys(v).map(function (k) { return v[k]; });
@@ -108,7 +111,7 @@
         items.push({ id: uid(), categoryId: cid, name: name, qty: null, unit: '', memo: '', done: false, excluded: false });
       });
     });
-    return { version: DATA_VERSION, categories: categories, items: items, notes: [], highlights: '', picks: emptyPicks(), dates: [], names: [] };
+    return { version: DATA_VERSION, categories: categories, items: items, notes: [], highlights: '', picks: emptyPicks(), dates: [], names: [], dueDate: '', memo: '', supports: [] };
   }
 
   // Validates and normalises an unknown object into app state. Returns { ok, data, error }.
@@ -243,7 +246,31 @@
       }
     }
 
-    return { ok: true, migrated: migrated, data: { version: DATA_VERSION, categories: categories, items: items, notes: notes, highlights: highlights, picks: picks, dates: dates, names: names } };
+    var dueDate = typeof raw.dueDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.dueDate) ? raw.dueDate : '';
+    var memo = typeof raw.memo === 'string' ? raw.memo.replace(/\r\n?/g, '\n').slice(0, MEMO_MAX) : '';
+
+    // 정부 지원 체크리스트
+    var supports = [];
+    var seenSup = {};
+    if (raw.supports !== undefined) {
+      if (!Array.isArray(raw.supports)) return { ok: false, error: '정부 지원 목록이 올바르지 않습니다.' };
+      for (var si = 0; si < raw.supports.length; si++) {
+        var sp = raw.supports[si];
+        if (!sp || typeof sp !== 'object') return { ok: false, error: (si + 1) + '번째 지원 항목이 올바르지 않습니다.' };
+        var spid = typeof sp.id === 'string' ? sp.id.trim() : '';
+        var sptitle = typeof sp.title === 'string' ? sp.title.trim().slice(0, 60) : '';
+        if (!spid) return { ok: false, error: (si + 1) + '번째 지원 항목에 ID가 없습니다.' };
+        if (!sptitle) return { ok: false, error: (si + 1) + '번째 지원 항목의 제목이 비어 있습니다.' };
+        if (seenSup[spid]) return { ok: false, error: '지원 항목 ID가 중복되었습니다: ' + spid };
+        seenSup[spid] = true;
+        var str = function (v, n) { return typeof v === 'string' ? v.replace(/\r\n?/g, '\n').trim().slice(0, n) : ''; };
+        var spstatus = SUPPORT_STATUS.indexOf(sp.status) !== -1 ? sp.status : 'todo';
+        supports.push({ id: spid, title: sptitle, target: str(sp.target, 300), benefit: str(sp.benefit, 500), howto: str(sp.howto, 500),
+          deadline: (typeof sp.deadline === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(sp.deadline)) ? sp.deadline : '',
+          link: str(sp.link, 300), status: spstatus, memo: str(sp.memo, 500) });
+      }
+    }
+    return { ok: true, migrated: migrated, data: { version: DATA_VERSION, categories: categories, items: items, notes: notes, highlights: highlights, picks: picks, dates: dates, names: names, dueDate: dueDate, memo: memo, supports: supports } };
   }
 
   /* ---------- storage ---------- */
@@ -325,7 +352,7 @@
 
   /* ---------- state ---------- */
   var state;
-  var ui = { filter: 'all', editMode: false, pendingUndo: null, undoTimer: null, collapsed: {}, noteForm: null, qtyEdit: null, highlightEdit: false, activeCategory: null, highlightsCollapsed: false, itemEdit: null, view: 'checklist', picksEdit: null, picksActive: 'gpt', dateEdit: null, nameEdit: null, search: '', searchOpen: false, stripOpen: false, onboardingDismissed: false };
+  var ui = { filter: 'all', editMode: false, pendingUndo: null, undoTimer: null, collapsed: {}, noteForm: null, qtyEdit: null, highlightEdit: false, activeCategory: null, highlightsCollapsed: false, itemEdit: null, view: 'checklist', picksEdit: null, picksActive: 'gpt', dateEdit: null, nameEdit: null, search: '', searchOpen: false, stripOpen: false, onboardingDismissed: false, deviceName: '', toastRemote: true, lastSeenActivity: 0, activity: [], supportEdit: null };
 
   // Active tab (narrow screens): falls back to the first category when the saved one is gone.
   function activeCategoryId() {
@@ -359,8 +386,11 @@
         if (parsed.collapsed && typeof parsed.collapsed === 'object') ui.collapsed = parsed.collapsed;
         if (typeof parsed.activeCategory === 'string') ui.activeCategory = parsed.activeCategory;
         ui.highlightsCollapsed = parsed.highlightsCollapsed === true;
-        if (['home','checklist','notes','picks','names'].indexOf(parsed.view) !== -1) ui.view = parsed.view;
+        if (['home','checklist','notes','picks','names','settings','supports'].indexOf(parsed.view) !== -1) ui.view = parsed.view;
         ui.onboardingDismissed = parsed.onboardingDismissed === true;
+        if (typeof parsed.deviceName === 'string') ui.deviceName = parsed.deviceName.slice(0, 12);
+        if (parsed.toastRemote === false) ui.toastRemote = false;
+        if (typeof parsed.lastSeenActivity === 'number') ui.lastSeenActivity = parsed.lastSeenActivity;
         if (parsed.picksActive === 'gpt' || parsed.picksActive === 'claude') ui.picksActive = parsed.picksActive;
       }
     } catch (e) { /* UI preferences are optional */ }
@@ -377,6 +407,9 @@
         picksActive: ui.picksActive,
         view: ui.view,
         onboardingDismissed: ui.onboardingDismissed,
+        deviceName: ui.deviceName,
+        toastRemote: ui.toastRemote,
+        lastSeenActivity: ui.lastSeenActivity,
         highlightsCollapsed: ui.highlightsCollapsed
       }));
     } catch (e) { /* ignore */ }
@@ -455,13 +488,15 @@
   }
 
   function setView(view) {
-    if (['home','checklist','notes','picks','names'].indexOf(view) === -1) return;
+    if (['home','checklist','notes','picks','names','settings','supports'].indexOf(view) === -1) return;
     if (ui.view === view) return;
     ui.view = view;
     ui.qtyEdit = null;
     ui.itemEdit = null;
     ui.dateEdit = null;
     ui.nameEdit = null;
+    ui.supportEdit = null;
+    if (view === 'home') markActivitySeen(false);
     saveUiPrefs();
     render();
     window.scrollTo(0, 0);
@@ -487,6 +522,10 @@
     });
     var vh = $('#view-home');
     if (vh) vh.hidden = ui.view !== 'home';
+    var vs = $('#view-settings'); if (vs) vs.hidden = ui.view !== 'settings';
+    var vsp = $('#view-supports'); if (vsp) vsp.hidden = ui.view !== 'supports';
+    var hb = $('#ptab-home-count');
+    if (hb) { var un = unreadActivityCount(); hb.textContent = un ? (un > 99 ? '99+' : String(un)) : ''; }
     var vc = $('#view-checklist'), vn = $('#view-notes'), vp = $('#view-picks'), vm = $('#view-names');
     if (vc) vc.hidden = ui.view !== 'checklist';
     if (vn) vn.hidden = ui.view !== 'notes';
@@ -522,6 +561,11 @@
     updateTabScroll($('#pick-tabs'));
     renderHome();
     renderHighlightsStrip();
+    renderDday();
+    renderActivity();
+    renderMemo();
+    renderSettings();
+    renderSupports();
     var searchBox = $('#search-wrap');
     if (searchBox) searchBox.hidden = !ui.searchOpen || ui.editMode || ui.view !== 'checklist';
     var st = $('#search-toggle');
@@ -883,7 +927,8 @@
       state.notes.push({ id: uid(), date: v.date, title: v.title, body: v.body });
       ui.noteForm = null;
       commit();
-      showToast('진료 메모를 저장했습니다.');
+      act('note', '일지 ‘' + (v.title || formatNoteDate(v.date)) + '’ 작성');
+      showToast('일지를 저장했습니다.');
       var addBtn = $('#add-note-btn');
       if (addBtn) addBtn.focus();
     } else {
@@ -893,7 +938,8 @@
       note.date = v.date; note.title = v.title; note.body = v.body;
       ui.noteForm = null;
       commit();
-      showToast('진료 메모를 수정했습니다.');
+      act('note', '일지 ‘' + (v.title || formatNoteDate(v.date)) + '’ 수정');
+      showToast('일지를 수정했습니다.');
       var editBtn = document.querySelector('[data-focus-key="note-edit:' + key + '"]');
       if (editBtn) editBtn.focus();
     }
@@ -908,7 +954,8 @@
     state.notes.splice(idx, 1);
     if (ui.noteForm === id) ui.noteForm = null;
     commit();
-    showToast('진료 메모를 삭제했습니다.', function () {
+    act('note', '일지 ‘' + (note.title || formatNoteDate(note.date)) + '’ 삭제');
+    showToast('일지를 삭제했습니다.', function () {
       state.notes.splice(Math.min(idx, state.notes.length), 0, note);
       commit();
       showToast('삭제를 취소했습니다.');
@@ -974,6 +1021,7 @@
     state.picks[key] = cleanPickText(text);
     ui.picksEdit = null;
     commit();
+    act('pick', pickLabel(key) + ' 택일 메모 ' + (state.picks[key] ? '수정' : '비움'));
     showToast(state.picks[key] ? (pickLabel(key) + ' 택일 정보를 저장했습니다.') : (pickLabel(key) + ' 택일 정보를 비웠습니다.'));
     var eb = document.querySelector('[data-pick="' + key + '"] [data-action="edit-pick"]');
     if (eb) eb.focus();
@@ -1063,13 +1111,13 @@ datesSorted().forEach(function (d) {
     var key = form.dataset.dateForm;
     if (key === 'new') {
       state.dates.push({ id: uid(), date: v.date, time: v.time, label: v.label, memo: v.memo });
-      ui.dateEdit = null; commit(); showToast('택일 후보를 저장했습니다.');
+      ui.dateEdit = null; commit(); act('date', '택일 후보 ‘' + (v.label || formatNoteDate(v.date)) + '’ 추가'); showToast('택일 후보를 저장했습니다.');
       var ab = $('#add-date-btn'); if (ab) ab.focus();
     } else {
       var d = findDate(key);
       if (!d) { ui.dateEdit = null; render(); return; }
       d.date = v.date; d.time = v.time; d.label = v.label; d.memo = v.memo;
-      ui.dateEdit = null; commit(); showToast('택일 후보를 수정했습니다.');
+      ui.dateEdit = null; commit(); act('date', '택일 후보 ‘' + (v.label || formatNoteDate(v.date)) + '’ 수정'); showToast('택일 후보를 수정했습니다.');
     }
   }
 
@@ -1085,6 +1133,7 @@ datesSorted().forEach(function (d) {
     state.names.forEach(function (n) { n.dateIds = n.dateIds.filter(function (x) { return x !== id; }); });
     if (ui.dateEdit === id) ui.dateEdit = null;
     commit();
+    act('date', '택일 후보 ‘' + (d.label || dateHeadline(d)) + '’ 삭제');
     showToast('택일 후보를 삭제했습니다.', function () {
       state.dates.splice(Math.min(idx, state.dates.length), 0, d);
       affected.forEach(function (nid) { var n = findName(nid); if (n && n.dateIds.indexOf(id) === -1) n.dateIds.push(id); });
@@ -1191,19 +1240,20 @@ datesSorted().forEach(function (d) {
     var key = form.dataset.nameForm;
     if (key === 'new') {
       state.names.push({ id: uid(), name: v.name, favorite: v.favorite, memo: v.memo, hanja: v.hanja, dateIds: v.dateIds });
-      ui.nameEdit = null; commit(); showToast('이름 후보를 저장했습니다.');
+      ui.nameEdit = null; commit(); act('name', '이름 후보 ‘' + v.name + '’ 추가'); showToast('이름 후보를 저장했습니다.');
       var ab = $('#add-name-btn'); if (ab) ab.focus();
     } else {
       var n = findName(key);
       if (!n) { ui.nameEdit = null; render(); return; }
       n.name = v.name; n.favorite = v.favorite; n.memo = v.memo; n.hanja = v.hanja; n.dateIds = v.dateIds;
-      ui.nameEdit = null; commit(); showToast('이름 후보를 수정했습니다.');
+      ui.nameEdit = null; commit(); act('name', '이름 후보 ‘' + v.name + '’ 수정'); showToast('이름 후보를 수정했습니다.');
     }
   }
 
   function toggleNameFav(id) {
     var n = findName(id); if (!n) return;
     n.favorite = !n.favorite; commit();
+    act('name', '이름 후보 ‘' + n.name + '’ ' + (n.favorite ? '★ 즐겨찾기' : '즐겨찾기 해제'));
   }
 
   function deleteName(id) {
@@ -1214,6 +1264,7 @@ datesSorted().forEach(function (d) {
     state.names.splice(idx, 1);
     if (ui.nameEdit === id) ui.nameEdit = null;
     commit();
+    act('name', '이름 후보 ‘' + n.name + '’ 삭제');
     showToast('이름 후보를 삭제했습니다.', function () {
       state.names.splice(Math.min(idx, state.names.length), 0, n);
       commit(); showToast('삭제를 취소했습니다.');
@@ -1236,17 +1287,207 @@ datesSorted().forEach(function (d) {
         '<span class="home-cat__bar"><span style="width:' + cp.percent + '%"></span></span>' +
         '<span class="home-cat__num">' + (cp.total ? cp.done + '/' + cp.total : '0') + '</span></button></li>';
     }).join('');
-    var ob = $('#onboard');
-    if (ob) ob.hidden = ui.onboardingDismissed;
-    var S = window.ChecklistSync;
-    var st = S ? S.getState() : { configured: false, status: 'unconfigured', roomId: null };
-    var t = $('#home-share-text'), b = $('#home-share-btn');
-    if (t) {
-      if (!st.configured) t.textContent = '이 사이트에 공유 설정이 없어 기록이 이 기기에만 저장됩니다.';
-      else if (st.roomId) t.textContent = (st.status === 'online' ? '연결됨 — ' : st.status === 'offline' ? '오프라인 — ' : '') + '같은 링크를 연 기기끼리 실시간으로 함께 바뀝니다.';
-      else t.textContent = '아직 연결되지 않았습니다. 공유 링크를 만들어 배우자 폰에서 열면 두 폰이 함께 움직여요.';
+    var sum = $('#supports-summary');
+    if (sum) {
+      var n = state.supports.length;
+      if (!n) sum.textContent = '받을 수 있는 지원을 정리하고 신청 상태를 관리하세요';
+      else {
+        var rec = state.supports.filter(function (x) { return x.status === 'received'; }).length;
+        var app = state.supports.filter(function (x) { return x.status === 'applied'; }).length;
+        sum.textContent = n + '개 항목 · 받음 ' + rec + ' · 신청함 ' + app;
+      }
     }
-    if (b) b.textContent = st.roomId ? '공유 설정 열기' : '공유 링크 만들기';
+  }
+
+  /* ---------- D-day ---------- */
+  function ddayText(due) {
+    if (!due) return '';
+    var parts = due.split('-');
+    var target = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+    var now = new Date(); var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    var diff = Math.round((target - today) / 86400000);
+    if (diff === 0) return 'D-Day';
+    return diff > 0 ? 'D-' + diff : 'D+' + Math.abs(diff);
+  }
+  function renderDday() {
+    var pill = $('#dday-pill');
+    if (!pill) return;
+    var t = ddayText(state.dueDate);
+    pill.hidden = !t;
+    if (t) {
+      pill.textContent = '👶 ' + t;
+      pill.title = '출산 예정일 ' + formatNoteDate(state.dueDate);
+    }
+  }
+
+  /* ---------- 메모 (홈) ---------- */
+  var memoTimer = null, memoLoggedValue = null;
+  function renderMemo() {
+    var ta = $('#memo-input');
+    if (!ta) return;
+    if (document.activeElement !== ta && ta.value !== (state.memo || '')) ta.value = state.memo || '';
+  }
+  function saveMemoFromInput(final) {
+    var ta = $('#memo-input'); if (!ta) return;
+    var v = ta.value.replace(/\r\n?/g, '\n').slice(0, MEMO_MAX);
+    var status = $('#memo-status');
+    if (v === (state.memo || '')) { if (status) status.textContent = ''; return; }
+    state.memo = v;
+    saveState();
+    if (status) status.textContent = '저장됨 ' + timeStamp();
+    if (final && memoLoggedValue !== v) { memoLoggedValue = v; act('memo', '메모를 수정함'); }
+  }
+
+  /* ---------- 변경 기록(알림) ---------- */
+  function myName() { return ui.deviceName || '나'; }
+  function act(kind, text) {
+    var S = window.ChecklistSync;
+    if (!S || !S.getState().roomId) return;
+    try { S.logActivity({ kind: kind, text: text }); } catch (e) { /* activity is best-effort */ }
+  }
+  function unreadActivityCount() {
+    var me = myName();
+    return ui.activity.filter(function (a) { return a.t > ui.lastSeenActivity && a.who !== me; }).length;
+  }
+  function markActivitySeen(rerender) {
+    var maxT = 0;
+    ui.activity.forEach(function (a) { if (a.t > maxT) maxT = a.t; });
+    if (maxT > ui.lastSeenActivity) { ui.lastSeenActivity = maxT; saveUiPrefs(); if (rerender) render(); }
+  }
+  function relTime(t) {
+    var d = Date.now() - t;
+    if (d < 60000) return '방금';
+    if (d < 3600000) return Math.floor(d / 60000) + '분 전';
+    if (d < 86400000) return Math.floor(d / 3600000) + '시간 전';
+    var dt = new Date(t); return (dt.getMonth() + 1) + '/' + dt.getDate() + ' ' + timeStampOf(dt);
+  }
+  function renderActivity() {
+    var list = $('#activity-list');
+    if (!list) return;
+    var S = window.ChecklistSync;
+    var st = S ? S.getState() : null;
+    var clearBtn = $('#activity-clear');
+    if (!st || !st.roomId) {
+      list.innerHTML = '<li class="activity-empty">가족 공유를 연결하면 서로의 변경 내용이 여기에 표시됩니다.</li>';
+      if (clearBtn) clearBtn.hidden = true;
+      return;
+    }
+    var me = myName();
+    var items = ui.activity.slice().sort(function (a, b) { return b.t - a.t; }).slice(0, 30);
+    if (!items.length) { list.innerHTML = '<li class="activity-empty">아직 변경 기록이 없습니다.</li>'; if (clearBtn) clearBtn.hidden = true; return; }
+    if (clearBtn) clearBtn.hidden = unreadActivityCount() === 0;
+    list.innerHTML = items.map(function (a) {
+      var unread = a.t > ui.lastSeenActivity && a.who !== me;
+      return '<li class="activity' + (unread ? ' is-unread' : '') + '"><span class="activity__who">' + escapeHtml(a.who || '누군가') + '</span>' +
+        '<span class="activity__text">' + escapeHtml(a.text || '') + '</span><span class="activity__time">' + escapeHtml(relTime(a.t)) + '</span></li>';
+    }).join('');
+  }
+  var activityInitialized = false;
+  function setActivity(list) {
+    var prevMax = 0;
+    ui.activity.forEach(function (a) { if (a.t > prevMax) prevMax = a.t; });
+    ui.activity = (list || []).filter(function (a) { return a && typeof a.t === 'number'; });
+    if (activityInitialized && ui.toastRemote) {
+      var me = myName();
+      var fresh = ui.activity.filter(function (a) { return a.t > prevMax && a.who !== me; });
+      if (fresh.length && document.visibilityState === 'visible') {
+        var last = fresh.sort(function (a, b) { return b.t - a.t; })[0];
+        showToast((last.who || '가족') + ' · ' + last.text + (fresh.length > 1 ? ' 외 ' + (fresh.length - 1) + '건' : ''));
+      }
+    }
+    activityInitialized = true;
+    if (ui.view === 'home' && !activityInitialized) markActivitySeen(false);
+    renderActivity();
+    renderPrimaryTabs();
+  }
+
+  /* ---------- 설정 ---------- */
+  function renderSettings() {
+    var dn = $('#device-name'); if (dn && document.activeElement !== dn) dn.value = ui.deviceName;
+    var dd = $('#due-date'); if (dd && document.activeElement !== dd) dd.value = state.dueDate || '';
+    var tr = $('#toast-remote'); if (tr) tr.checked = ui.toastRemote;
+  }
+
+  /* ---------- 정부 지원 체크리스트 ---------- */
+  function findSupport(id) { for (var i = 0; i < state.supports.length; i++) if (state.supports[i].id === id) return state.supports[i]; return null; }
+  function supportFormHtml(sp) {
+    var isNew = !sp; var id = isNew ? 'new' : escapeHtml(sp.id);
+    var v = function (k) { return isNew ? '' : escapeHtml(sp[k] || ''); };
+    var h = '<form class="support-form" data-support-form="' + id + '">';
+    h += '<div class="field"><label for="sp-title-' + id + '">지원 이름</label><input type="text" id="sp-title-' + id + '" name="title" data-focus-key="sp-title:' + id + '" value="' + v('title') + '" maxlength="60" placeholder="예: 첫만남이용권" required></div>';
+    h += '<div class="field"><label for="sp-target-' + id + '">대상·조건</label><input type="text" id="sp-target-' + id + '" name="target" value="' + v('target') + '" maxlength="300" placeholder="누가 받을 수 있는지"></div>';
+    h += '<div class="field"><label for="sp-benefit-' + id + '">지원 내용</label><textarea id="sp-benefit-' + id + '" name="benefit" rows="2" maxlength="500" placeholder="금액·바우처·기간 등">' + v('benefit') + '</textarea></div>';
+    h += '<div class="field"><label for="sp-howto-' + id + '">신청 방법·유의사항</label><textarea id="sp-howto-' + id + '" name="howto" rows="2" maxlength="500" placeholder="어디서, 무엇을 준비해서, 주의할 점">' + v('howto') + '</textarea></div>';
+    h += '<div class="field-row"><div class="field"><label for="sp-deadline-' + id + '">신청 기한</label><input type="date" id="sp-deadline-' + id + '" name="deadline" value="' + v('deadline') + '"></div>';
+    h += '<div class="field"><label for="sp-status-' + id + '">상태</label><select id="sp-status-' + id + '" name="status">' + SUPPORT_STATUS.map(function (k) { return '<option value="' + k + '"' + (!isNew && sp.status === k ? ' selected' : '') + '>' + SUPPORT_STATUS_LABEL[k] + '</option>'; }).join('') + '</select></div></div>';
+    h += '<div class="field"><label for="sp-link-' + id + '">공식 링크</label><input type="url" id="sp-link-' + id + '" name="link" value="' + v('link') + '" maxlength="300" placeholder="https://www.bokjiro.go.kr/ 등" inputmode="url"></div>';
+    h += '<div class="field"><label for="sp-memo-' + id + '">메모</label><textarea id="sp-memo-' + id + '" name="memo" rows="2" maxlength="500">' + v('memo') + '</textarea></div>';
+    h += '<p class="field-error" data-error hidden></p>';
+    h += '<div class="note-form__actions"><button type="submit" class="btn btn--primary btn--small">' + (isNew ? '항목 저장' : '수정 저장') + '</button><button type="button" class="btn btn--small" data-action="cancel-support">취소</button></div></form>';
+    return h;
+  }
+  function safeHref(u) {
+    return /^https?:\/\//i.test(u) ? u : '';
+  }
+  function renderSupports() {
+    var list = $('#support-list'); if (!list) return;
+    var stats = $('#supports-stats');
+    var counts = { todo: 0, applied: 0, received: 0, na: 0 };
+    state.supports.forEach(function (x) { counts[x.status] = (counts[x.status] || 0) + 1; });
+    if (stats) stats.innerHTML = state.supports.length ? SUPPORT_STATUS.map(function (k) { return '<span class="sp-stat sp-stat--' + k + '">' + SUPPORT_STATUS_LABEL[k] + ' ' + counts[k] + '</span>'; }).join('') : '';
+    var cnt = $('#supports-count'); if (cnt) cnt.textContent = state.supports.length ? state.supports.length + '개' : '';
+    var html = '';
+    if (ui.supportEdit === 'new') html += '<li class="support support--editing">' + supportFormHtml(null) + '</li>';
+    if (!state.supports.length && ui.supportEdit !== 'new') {
+      html += '<li class="datecard-empty">아직 항목이 없습니다. ‘항목 추가’로 첫만남이용권, 부모급여, 출산휴가 같은 지원을 하나씩 정리해 보세요.<br><small>각 항목에 대상·지원 내용·신청 방법·기한·공식 링크·상태(확인 전→신청함→받음)를 적을 수 있습니다.</small></li>';
+    }
+    var order = { todo: 0, applied: 1, received: 2, na: 3 };
+    state.supports.slice().sort(function (a, b) { return order[a.status] - order[b.status]; }).forEach(function (sp) {
+      if (ui.supportEdit === sp.id) { html += '<li class="support support--editing" data-support-id="' + escapeHtml(sp.id) + '">' + supportFormHtml(sp) + '</li>'; return; }
+      var href = safeHref(sp.link);
+      html += '<li class="support support--' + sp.status + '" data-support-id="' + escapeHtml(sp.id) + '">';
+      html += '<div class="support__head"><div class="support__meta"><span class="support__title">' + escapeHtml(sp.title) + '</span><span class="sp-stat sp-stat--' + sp.status + '">' + SUPPORT_STATUS_LABEL[sp.status] + '</span>';
+      if (sp.deadline) html += '<span class="badge badge--label">기한 ' + escapeHtml(formatNoteDate(sp.deadline)) + '</span>';
+      html += '</div><div class="support__actions"><button type="button" class="btn btn--small" data-action="edit-support" data-focus-key="sp-edit:' + escapeHtml(sp.id) + '">수정</button><button type="button" class="btn btn--small btn--danger" data-action="delete-support">삭제</button></div></div>';
+      if (sp.target) html += '<p class="support__row"><b>대상</b>' + escapeHtml(sp.target) + '</p>';
+      if (sp.benefit) html += '<p class="support__row"><b>내용</b>' + escapeHtml(sp.benefit) + '</p>';
+      if (sp.howto) html += '<p class="support__row"><b>신청</b>' + escapeHtml(sp.howto) + '</p>';
+      if (sp.memo) html += '<p class="support__row"><b>메모</b>' + escapeHtml(sp.memo) + '</p>';
+      if (href) html += '<p class="support__row"><a class="support__link" href="' + escapeHtml(href) + '" target="_blank" rel="noopener noreferrer">공식 안내 열기 ↗</a></p>';
+      html += '<div class="support__status"><label class="visually-hidden" for="sp-quick-' + escapeHtml(sp.id) + '">상태 바꾸기</label><select id="sp-quick-' + escapeHtml(sp.id) + '" data-action="quick-status">' + SUPPORT_STATUS.map(function (k) { return '<option value="' + k + '"' + (sp.status === k ? ' selected' : '') + '>' + SUPPORT_STATUS_LABEL[k] + '</option>'; }).join('') + '</select></div>';
+      html += '</li>';
+    });
+    list.innerHTML = html;
+    var addBtn = $('#add-support-btn'); if (addBtn) addBtn.hidden = ui.supportEdit === 'new';
+  }
+  function readSupportForm(form) {
+    var g = function (n, max) { return (form.elements[n].value || '').replace(/\r\n?/g, '\n').trim().slice(0, max); };
+    var dl = form.elements.deadline.value; if (dl && !/^\d{4}-\d{2}-\d{2}$/.test(dl)) dl = '';
+    var st = form.elements.status.value; if (SUPPORT_STATUS.indexOf(st) === -1) st = 'todo';
+    return { title: g('title', 60), target: g('target', 300), benefit: g('benefit', 500), howto: g('howto', 500), deadline: dl, link: g('link', 300), status: st, memo: g('memo', 500) };
+  }
+  function submitSupportForm(form) {
+    var v = readSupportForm(form);
+    var err = $('[data-error]', form);
+    if (!v.title) { err.textContent = '지원 이름을 입력하세요.'; err.hidden = false; form.elements.title.focus(); return; }
+    var key = form.dataset.supportForm;
+    if (key === 'new') {
+      state.supports.push({ id: uid(), title: v.title, target: v.target, benefit: v.benefit, howto: v.howto, deadline: v.deadline, link: v.link, status: v.status, memo: v.memo });
+      ui.supportEdit = null; commit(); act('support', '지원 항목 ‘' + v.title + '’ 추가'); showToast('지원 항목을 저장했습니다.');
+    } else {
+      var sp = findSupport(key); if (!sp) { ui.supportEdit = null; render(); return; }
+      Object.keys(v).forEach(function (k) { sp[k] = v[k]; });
+      ui.supportEdit = null; commit(); act('support', '지원 항목 ‘' + v.title + '’ 수정'); showToast('지원 항목을 수정했습니다.');
+    }
+  }
+  function deleteSupport(id) {
+    var idx = -1; for (var i = 0; i < state.supports.length; i++) if (state.supports[i].id === id) idx = i;
+    if (idx < 0) return;
+    var sp = state.supports[idx];
+    if (!window.confirm('‘' + sp.title + '’ 항목을 삭제할까요?')) return;
+    state.supports.splice(idx, 1); if (ui.supportEdit === id) ui.supportEdit = null;
+    commit(); act('support', '지원 항목 ‘' + sp.title + '’ 삭제');
+    showToast('지원 항목을 삭제했습니다.', function () { state.supports.splice(Math.min(idx, state.supports.length), 0, sp); commit(); showToast('삭제를 취소했습니다.'); });
   }
 
   function renderHighlightsStrip() {
@@ -1300,6 +1541,7 @@ datesSorted().forEach(function (d) {
     state.highlights = cleanHighlights(text);
     ui.highlightEdit = false;
     commit();
+    act('highlight', '꼭 기억하기 ' + (state.highlights ? '수정' : '비움'));
     showToast(state.highlights ? '꼭 기억하기를 저장했습니다.' : '꼭 기억하기를 비웠습니다.');
     $('#highlights-edit-btn').focus();
   }
@@ -1336,6 +1578,7 @@ datesSorted().forEach(function (d) {
     ui.activeCategory = newId;
     saveUiPrefs();
     commit();
+    act('category', '분류 ‘' + n.slice(0, 40) + '’ 추가');
     return true;
   }
 
@@ -1349,8 +1592,10 @@ datesSorted().forEach(function (d) {
       return;
     }
     if (n === cat.name) return;
+    var oldName = cat.name;
     cat.name = n.slice(0, 40);
     saveState();
+    act('category', '분류 ‘' + oldName + '’ → ‘' + cat.name + '’ 이름 변경');
     // Targeted DOM update so focus and tab order are preserved.
     var card = inputEl.closest('[data-category-id]');
     if (card) {
@@ -1399,6 +1644,7 @@ datesSorted().forEach(function (d) {
     state.categories.splice(index, 1);
     state.items = state.items.filter(function (it) { return it.categoryId !== id; });
     commit();
+    act('category', '분류 ‘' + cat.name + '’ 삭제' + (catItems.length ? ' (준비물 ' + catItems.length + '개 포함)' : ''));
     showToast('‘' + cat.name + '’ 분류를 삭제했습니다.' + (catItems.length ? ' (준비물 ' + catItems.length + '개 포함)' : ''), function () {
       state.categories.splice(Math.min(index, state.categories.length), 0, cat);
       state.items = state.items.concat(catItems);
@@ -1413,6 +1659,7 @@ datesSorted().forEach(function (d) {
     if (!findCategory(categoryId)) return false;
     state.items.push({ id: uid(), categoryId: categoryId, name: n.slice(0, 60), qty: null, unit: '', memo: '', done: false, excluded: false });
     commit();
+    act('add', '‘' + n.slice(0, 60) + '’ 추가');
     return true;
   }
 
@@ -1422,6 +1669,7 @@ datesSorted().forEach(function (d) {
     var index = state.items.indexOf(it);
     state.items.splice(index, 1);
     commit();
+    act('delete', '‘' + it.name + '’ 삭제');
     showToast('‘' + it.name + '’ 항목을 삭제했습니다.', function () {
       if (!findCategory(it.categoryId)) {
         showToast('원래 분류가 없어 복구할 수 없습니다.');
@@ -1429,6 +1677,7 @@ datesSorted().forEach(function (d) {
       }
       state.items.splice(Math.min(index, state.items.length), 0, it);
       commit();
+      act('add', '‘' + it.name + '’ 삭제 취소');
       showToast('삭제를 취소했습니다.');
     });
   }
@@ -1438,6 +1687,7 @@ datesSorted().forEach(function (d) {
     if (!it || it.excluded) return;
     it.done = !!checked;
     commit();
+    act(it.done ? 'check' : 'uncheck', '‘' + it.name + '’ ' + (it.done ? '체크' : '체크 해제'));
   }
 
   function toggleExcluded(id) {
@@ -1445,6 +1695,7 @@ datesSorted().forEach(function (d) {
     if (!it) return;
     it.excluded = !it.excluded;
     commit();
+    act('edit', '‘' + it.name + '’ ' + (it.excluded ? '준비 대상에서 제외' : '다시 포함'));
     showToast(it.excluded ? '‘' + it.name + '’ 항목을 준비 대상에서 제외했습니다.' : '‘' + it.name + '’ 항목을 다시 포함했습니다.');
   }
 
@@ -1482,6 +1733,7 @@ datesSorted().forEach(function (d) {
     var sc = $('#search-clear'); if (sc) sc.hidden = true;
     saveUiPrefs();
     commit();
+    act('reset', '기본 목록으로 초기화함');
     showToast('기본 목록으로 초기화했습니다. 백업 파일이 저장되었습니다.');
   }
 
@@ -1491,6 +1743,7 @@ datesSorted().forEach(function (d) {
     it.categoryId = categoryId;
     ui.itemEdit = null;
     commit();
+    act('edit', '‘' + it.name + '’ → ‘' + findCategory(categoryId).name + '’ 분류로 이동');
     showToast('‘' + it.name + '’ 항목을 ‘' + findCategory(categoryId).name + '’ 분류로 이동했습니다.');
   }
 
@@ -1543,6 +1796,9 @@ datesSorted().forEach(function (d) {
     }
     saveState();
     refreshProgress();
+    if (field === 'name') act('edit', '‘' + it.name + '’ 이름 수정');
+    else if (field === 'qty' || field === 'unit-select' || field === 'unit-custom') act('edit', '‘' + it.name + '’ 수량 ' + (qtyLabel(it) || '미입력') + '로 변경');
+    else if (field === 'memo') act('edit', '‘' + it.name + '’ 메모 수정');
     var qtyBtn = $('.item__qty', rowEl);
     if (qtyBtn) {
       var label = qtyLabel(it);
@@ -1563,7 +1819,10 @@ datesSorted().forEach(function (d) {
       highlights: state.highlights,
       picks: state.picks,
       dates: state.dates,
-      names: state.names
+      names: state.names,
+      dueDate: state.dueDate,
+      memo: state.memo,
+      supports: state.supports
     }, null, pretty ? 2 : 0);
   }
 
@@ -1606,6 +1865,7 @@ datesSorted().forEach(function (d) {
     ui.itemEdit = null; ui.qtyEdit = null; ui.noteForm = null; ui.highlightEdit = false;
     hideToast();
     commit();
+    act('import', sourceLabel + '을 불러와 목록을 교체함');
     showToast(sourceLabel + '을 불러왔습니다.');
     return true;
   }
@@ -1643,7 +1903,7 @@ datesSorted().forEach(function (d) {
     if (el.readOnly || el.disabled) return false; // readonly share-link etc. must not block sync
     if (el.type === 'checkbox' || el.type === 'radio' || el.type === 'file' || el.type === 'button') return false;
     // Only editable fields inside an item/note/highlights editor should defer a remote update.
-    return !!el.closest('.item--edit, .is-qty-editing, .note-form, #highlights-form, #add-category-form, .pick-form, .date-form, .name-form');
+    return !!el.closest('.item--edit, .is-qty-editing, .note-form, #highlights-form, #add-category-form, .pick-form, .date-form, .name-form, .support-form, #memo-card, #view-settings');
   }
 
   function applyRemote(remoteState) {
@@ -1680,7 +1940,9 @@ datesSorted().forEach(function (d) {
     normalize: function (raw) { var r = normalizeState(raw); return r.ok ? r.data : null; },
     isPristine: function () { return !touched; },
     applyRemote: applyRemote,
-    onChange: function (cb) { changeListeners.push(cb); }
+    onChange: function (cb) { changeListeners.push(cb); },
+    getDeviceName: myName,
+    setActivity: setActivity
   };
 
   function syncStatusText(st) {
@@ -1707,7 +1969,7 @@ datesSorted().forEach(function (d) {
     badge.className = 'sync-pill' + (st.status === 'online' ? ' is-online' : st.status === 'error' ? ' is-error' : st.status === 'offline' ? ' is-offline' : st.configured ? ' is-off' : ' is-local');
     badge.hidden = false;
     renderHome();
-    if (panel.hidden) return;
+    renderActivity();
     var html = '';
     if (!st.configured) {
       html += '<p class="share__text">가족 공유를 쓰려면 사이트에 Firebase 설정이 필요합니다. 아직 설정되어 있지 않아 기록은 이 기기에만 저장됩니다.</p>';
@@ -1735,35 +1997,32 @@ datesSorted().forEach(function (d) {
   }
 
   function openSharePanel() {
-    var panel = $('#share-panel');
-    panel.hidden = false;
-    var acf = $('#add-category-form'); if (acf) acf.hidden = true;
-    var pi = $('#paste-import'); if (pi) pi.hidden = true;
+    setView('settings');
     renderSharePanel();
-    panel.scrollIntoView({ block: 'nearest' });
-    var first = panel.querySelector('button[data-action], input, button.btn');
-    if (first) first.focus();
+    var panel = $('#share-panel');
+    if (panel) {
+      panel.scrollIntoView({ block: 'start' });
+      var first = panel.querySelector('button[data-action], input');
+      if (first) first.focus({ preventScroll: true });
+    }
   }
+  function closeMenu() { var m = $('#backup-menu'); if (m) m.open = false; }
 
   function bindShareEvents() {
     document.addEventListener('click', function (e) {
-      var t = e.target.closest('[data-action="open-share"]');
+      var t = e.target.closest('[data-action="open-share"], [data-action="open-settings"], [data-action="open-supports"], [data-action="go-home"]');
       if (!t) return;
-      var m = $('#backup-menu'); if (m) m.open = false;
-      openSharePanel();
+      closeMenu();
+      var a = t.dataset.action;
+      if (a === 'open-share') openSharePanel();
+      else if (a === 'open-settings') setView('settings');
+      else if (a === 'open-supports') setView('supports');
+      else if (a === 'go-home') setView('home');
     });
-    $('#share-btn').addEventListener('click', function () {
-      var m = $('#backup-menu'); if (m) m.open = false;
-      var panel = $('#share-panel');
-      panel.hidden = !panel.hidden;
-      if (!panel.hidden) {
-        $('#add-category-form').hidden = true;
-        $('#paste-import').hidden = true;
-        renderSharePanel();
-        panel.scrollIntoView({ block: 'nearest' });
-      }
-    });
-    $('#share-close').addEventListener('click', function () { $('#share-panel').hidden = true; $('#share-btn').focus(); });
+    var shareBtn = $('#share-btn');
+    if (shareBtn) shareBtn.addEventListener('click', openSharePanel);
+    var shareClose = $('#share-close');
+    if (shareClose) shareClose.addEventListener('click', function () { setView('home'); });
     $('#share-panel').addEventListener('click', function (e) {
       var btn = e.target.closest('[data-action]');
       if (!btn || btn.tagName !== 'BUTTON') return;
@@ -1834,9 +2093,8 @@ datesSorted().forEach(function (d) {
     ui.highlightEdit = false;
     var fsel = $('#filter-select'); if (fsel) fsel.value = 'all';
     var addForm = $('#add-category-form'); if (addForm) addForm.hidden = true;
-    var share = $('#share-panel'); if (share) share.hidden = true;
     var paste = $('#paste-import'); if (paste) paste.hidden = true;
-    var menu = $('#backup-menu'); if (menu) menu.open = false;
+    closeMenu();
     saveUiPrefs();
     render();
     window.scrollTo(0, 0);
@@ -1889,8 +2147,8 @@ datesSorted().forEach(function (d) {
       }
     });
 
-    $('#export-btn').addEventListener('click', function () { $('#backup-menu').open = false; exportJson(); });
-    $('#import-btn').addEventListener('click', function () { $('#backup-menu').open = false; $('#import-file').click(); });
+    $('#export-btn').addEventListener('click', function () { closeMenu(); exportJson(); });
+    $('#import-btn').addEventListener('click', function () { closeMenu(); $('#import-file').click(); });
     var searchToggle = $('#search-toggle');
     if (searchToggle) {
       searchToggle.addEventListener('click', function () {
@@ -1906,16 +2164,64 @@ datesSorted().forEach(function (d) {
         var b = e.target.closest('[data-action]');
         if (!b) return;
         switch (b.dataset.action) {
-          case 'ob-dismiss': ui.onboardingDismissed = true; saveUiPrefs(); renderHome(); break;
-          case 'ob-edit': ui.editMode = true; setView('checklist'); break;
-          case 'ob-share': openSharePanel(); break;
-          case 'ob-check': case 'go-checklist': setView('checklist'); break;
+          case 'go-checklist': setView('checklist'); break;
           case 'go-category': ui.activeCategory = b.dataset.categoryId; setView('checklist'); break;
         }
       });
     }
     var strip = $('#highlights-strip');
     if (strip) strip.addEventListener('click', function () { ui.stripOpen = !ui.stripOpen; renderHighlightsStrip(); });
+
+    // 메모 (홈): 입력 중 자동 저장, 벗어날 때 변경 기록
+    var memoTa = $('#memo-input');
+    if (memoTa) {
+      memoTa.addEventListener('input', function () {
+        var st = $('#memo-status'); if (st) st.textContent = '입력 중…';
+        clearTimeout(memoTimer); memoTimer = setTimeout(function () { saveMemoFromInput(false); }, 600);
+      });
+      memoTa.addEventListener('blur', function () { clearTimeout(memoTimer); saveMemoFromInput(true); });
+    }
+    var actClear = $('#activity-clear');
+    if (actClear) actClear.addEventListener('click', function () { markActivitySeen(true); });
+
+    // 설정
+    var dnInput = $('#device-name');
+    if (dnInput) dnInput.addEventListener('change', function () { ui.deviceName = dnInput.value.trim().slice(0, 12); saveUiPrefs(); renderActivity(); renderPrimaryTabs(); showToast('이름을 저장했습니다.'); });
+    var ddInput = $('#due-date');
+    if (ddInput) ddInput.addEventListener('change', function () {
+      var v = ddInput.value; if (v && !/^\d{4}-\d{2}-\d{2}$/.test(v)) v = '';
+      if (v === (state.dueDate || '')) return;
+      state.dueDate = v; commit(); act('due', v ? '출산 예정일을 ' + formatNoteDate(v) + '로 설정' : '출산 예정일 지움');
+      showToast(v ? '출산 예정일을 저장했습니다. ' + ddayText(v) : '출산 예정일을 지웠습니다.');
+    });
+    var trInput = $('#toast-remote');
+    if (trInput) trInput.addEventListener('change', function () { ui.toastRemote = trInput.checked; saveUiPrefs(); });
+
+    // 정부 지원
+    var supView = $('#view-supports');
+    if (supView) {
+      supView.addEventListener('click', function (e) {
+        var add = e.target.closest('#add-support-btn');
+        if (add) { ui.supportEdit = 'new'; renderSupports(); var f = document.querySelector('[data-focus-key="sp-title:new"]'); if (f) f.focus(); return; }
+        var btn = e.target.closest('button[data-action]'); if (!btn) return;
+        var li = btn.closest('[data-support-id]');
+        switch (btn.dataset.action) {
+          case 'edit-support': ui.supportEdit = li.dataset.supportId; renderSupports(); var ff = document.querySelector('[data-focus-key="sp-title:' + li.dataset.supportId + '"]'); if (ff) ff.focus(); break;
+          case 'cancel-support': ui.supportEdit = null; renderSupports(); var back = li ? document.querySelector('[data-focus-key="sp-edit:' + li.dataset.supportId + '"]') : $('#add-support-btn'); if (back) back.focus(); break;
+          case 'delete-support': deleteSupport(li.dataset.supportId); break;
+        }
+      });
+      supView.addEventListener('submit', function (e) {
+        var form = e.target.closest('form[data-support-form]'); if (!form) return;
+        e.preventDefault(); submitSupportForm(form);
+      });
+      supView.addEventListener('change', function (e) {
+        var sel = e.target.closest('select[data-action="quick-status"]'); if (!sel) return;
+        var li = sel.closest('[data-support-id]'); var sp = findSupport(li.dataset.supportId); if (!sp) return;
+        if (SUPPORT_STATUS.indexOf(sel.value) === -1) return;
+        sp.status = sel.value; commit(); act('support', '지원 항목 ‘' + sp.title + '’ 상태 → ' + SUPPORT_STATUS_LABEL[sp.status]);
+      });
+    }
     var searchInput = $('#item-search');
     if (searchInput) {
       searchInput.addEventListener('input', function () { ui.search = searchInput.value; renderCategories(); $('#search-clear').hidden = !ui.search; });
@@ -1923,10 +2229,10 @@ datesSorted().forEach(function (d) {
       if (clearBtn) clearBtn.addEventListener('click', function () { ui.search = ''; searchInput.value = ''; clearBtn.hidden = true; searchInput.focus(); renderCategories(); });
     }
     var resetBtn = $('#reset-btn');
-    if (resetBtn) resetBtn.addEventListener('click', function () { $('#backup-menu').open = false; resetToDefault(); });
-    $('#copy-text-btn').addEventListener('click', function () { $('#backup-menu').open = false; copyBackupText(); });
+    if (resetBtn) resetBtn.addEventListener('click', function () { closeMenu(); resetToDefault(); });
+    $('#copy-text-btn').addEventListener('click', function () { closeMenu(); copyBackupText(); });
     $('#paste-text-btn').addEventListener('click', function () {
-      $('#backup-menu').open = false;
+      closeMenu();
       $('#add-category-form').hidden = true;
       var panel = $('#paste-import');
       panel.hidden = false;
@@ -1937,7 +2243,7 @@ datesSorted().forEach(function (d) {
     $('#paste-import-cancel').addEventListener('click', function () {
       $('#paste-import').hidden = true;
       $('#paste-import-text').value = '';
-      $('#backup-menu').querySelector('summary').focus();
+      var pb = $('#paste-text-btn'); if (pb) pb.focus();
     });
     $('#paste-import').addEventListener('submit', function (e) {
       e.preventDefault();
@@ -1955,7 +2261,7 @@ datesSorted().forEach(function (d) {
     });
     document.addEventListener('click', function (e) {
       var menu = $('#backup-menu');
-      if (menu.open && !menu.contains(e.target)) menu.open = false;
+      if (menu && menu.open && !menu.contains(e.target)) menu.open = false;
     });
 
     $('#toast-undo').addEventListener('click', function () {
@@ -2249,6 +2555,7 @@ datesSorted().forEach(function (d) {
     state = loaded.state;
     loadUiPrefs();
     if (!uiPrefsFound) ui.view = 'home';
+    if (ui.view === 'supports') ui.view = 'home';
     bindEvents();
     if (loaded.fresh && storageOk) {
       saveState({ initial: true });
