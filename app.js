@@ -1315,7 +1315,7 @@ datesSorted().forEach(function (d) {
     var t = ddayText(state.dueDate);
     pill.hidden = !t;
     if (t) {
-      pill.textContent = '👶 ' + t;
+      pill.textContent = '👶🏻 ' + t;
       pill.title = '출산 예정일 ' + formatNoteDate(state.dueDate);
     }
   }
