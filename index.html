@@ -15,7 +15,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="마미백">
   <meta name="mobile-web-app-capable" content="yes">
-  <link rel="stylesheet" href="./style.css?v=20260922e">
+  <link rel="stylesheet" href="./style.css?v=20260923a">
 </head>
 <body>
   <a class="skip-link" href="#main-area">본문으로 건너뛰기</a>
@@ -77,11 +77,13 @@
 
     <section class="home-card" id="memo-card" aria-labelledby="memo-title">
       <div class="progress-head">
-        <h2 id="memo-title" class="home-card__title">📝 메모</h2>
-        <p class="memo-status" id="memo-status" aria-live="polite"></p>
+        <h2 id="memo-title" class="home-card__title">📝 메모 <span class="notes__count" id="memo-count"></span></h2>
+        <div class="settings-actions">
+          <button type="button" class="btn btn--small" data-action="new-memo-home">새 메모</button>
+          <button type="button" class="btn btn--small" data-action="open-memos">전체 보기</button>
+        </div>
       </div>
-      <label for="memo-input" class="visually-hidden">자유 메모</label>
-      <textarea id="memo-input" class="memo-input" rows="4" maxlength="5000" placeholder="아무거나 적어 두세요. 자동으로 저장됩니다."></textarea>
+      <div class="memo-preview" id="memo-preview"></div>
     </section>
 
     <button type="button" class="home-link" data-action="open-supports">
@@ -175,6 +177,19 @@
       <button type="button" class="btn btn--primary btn--small" id="add-name-btn">이름 추가</button>
     </div>
     <ul class="namecard-list" id="name-list"></ul>
+  </section>
+
+  <!-- ===== 메모 (홈에서 진입) ===== -->
+  <section id="view-memos" class="view memos" role="region" aria-labelledby="memos-title" hidden>
+    <div class="notes__head">
+      <div class="view-back">
+        <button type="button" class="btn btn--small" data-action="go-home" aria-label="홈으로">←</button>
+        <h2 id="memos-title" class="notes__title">📝 메모</h2>
+      </div>
+      <button type="button" class="btn btn--primary btn--small" data-action="new-memo">새 메모</button>
+    </div>
+    <p class="notice">입력하면 자동으로 저장되고, 가족 공유 중이면 함께 보입니다. 비워 두고 나가면 그 메모는 사라집니다.</p>
+    <ul class="memo-list" id="memo-list"></ul>
   </section>
 
   <!-- ===== 정부 지원 (홈·설정에서 진입) ===== -->
@@ -285,9 +300,9 @@
     <button type="button" class="toast__close" id="toast-close" aria-label="알림 닫기">×</button>
   </div>
 
-  <script src="./firebase-config.js?v=20260922e"></script>
-  <script src="./app.js?v=20260922e"></script>
-  <script src="./sync.js?v=20260922e"></script>
+  <script src="./firebase-config.js?v=20260923a"></script>
+  <script src="./app.js?v=20260923a"></script>
+  <script src="./sync.js?v=20260923a"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function () {

@@ -111,7 +111,7 @@
         items.push({ id: uid(), categoryId: cid, name: name, qty: null, unit: '', memo: '', done: false, excluded: false });
       });
     });
-    return { version: DATA_VERSION, categories: categories, items: items, notes: [], highlights: '', picks: emptyPicks(), dates: [], names: [], dueDate: '', memo: '', supports: [] };
+    return { version: DATA_VERSION, categories: categories, items: items, notes: [], highlights: '', picks: emptyPicks(), dates: [], names: [], dueDate: '', memo: '', memos: [], supports: [] };
   }
 
   // Validates and normalises an unknown object into app state. Returns { ok, data, error }.
@@ -248,6 +248,22 @@
 
     var dueDate = typeof raw.dueDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.dueDate) ? raw.dueDate : '';
     var memo = typeof raw.memo === 'string' ? raw.memo.replace(/\r\n?/g, '\n').slice(0, MEMO_MAX) : '';
+    var memos = [];
+    var seenMemo = {};
+    if (raw.memos !== undefined) {
+      if (!Array.isArray(raw.memos)) return { ok: false, error: '메모 목록이 올바르지 않습니다.' };
+      for (var mi = 0; mi < raw.memos.length; mi++) {
+        var mm = raw.memos[mi];
+        if (!mm || typeof mm !== 'object') return { ok: false, error: (mi + 1) + '번째 메모가 올바르지 않습니다.' };
+        var mid = typeof mm.id === 'string' ? mm.id.trim() : '';
+        var mtext = typeof mm.text === 'string' ? mm.text.replace(/\r\n?/g, '\n').slice(0, MEMO_MAX) : '';
+        if (!mid || !mtext.trim() || seenMemo[mid]) continue; // empty or duplicate memos are dropped
+        seenMemo[mid] = true;
+        memos.push({ id: mid, text: mtext, updated: typeof mm.updated === 'number' ? mm.updated : 0 });
+      }
+    }
+    if (memo.trim() && !seenMemo['legacy-memo']) { memos.push({ id: 'legacy-memo', text: memo, updated: 0 }); }
+    memo = '';
 
     // 정부 지원 체크리스트
     var supports = [];
@@ -270,7 +286,7 @@
           link: str(sp.link, 300), status: spstatus, memo: str(sp.memo, 500) });
       }
     }
-    return { ok: true, migrated: migrated, data: { version: DATA_VERSION, categories: categories, items: items, notes: notes, highlights: highlights, picks: picks, dates: dates, names: names, dueDate: dueDate, memo: memo, supports: supports } };
+    return { ok: true, migrated: migrated, data: { version: DATA_VERSION, categories: categories, items: items, notes: notes, highlights: highlights, picks: picks, dates: dates, names: names, dueDate: dueDate, memo: memo, memos: memos, supports: supports } };
   }
 
   /* ---------- storage ---------- */
@@ -352,7 +368,7 @@
 
   /* ---------- state ---------- */
   var state;
-  var ui = { filter: 'all', editMode: false, pendingUndo: null, undoTimer: null, collapsed: {}, noteForm: null, qtyEdit: null, highlightEdit: false, activeCategory: null, highlightsCollapsed: false, itemEdit: null, view: 'checklist', picksEdit: null, picksActive: 'gpt', dateEdit: null, nameEdit: null, search: '', searchOpen: false, stripOpen: false, onboardingDismissed: false, deviceName: '', toastRemote: true, lastSeenActivity: 0, activity: [], supportEdit: null };
+  var ui = { filter: 'all', editMode: false, pendingUndo: null, undoTimer: null, collapsed: {}, noteForm: null, qtyEdit: null, highlightEdit: false, activeCategory: null, highlightsCollapsed: false, itemEdit: null, view: 'checklist', picksEdit: null, picksActive: 'gpt', dateEdit: null, nameEdit: null, search: '', searchOpen: false, stripOpen: false, onboardingDismissed: false, deviceName: '', toastRemote: true, lastSeenActivity: 0, activity: [], supportEdit: null, memoFocus: null };
 
   // Active tab (narrow screens): falls back to the first category when the saved one is gone.
   function activeCategoryId() {
@@ -386,7 +402,7 @@
         if (parsed.collapsed && typeof parsed.collapsed === 'object') ui.collapsed = parsed.collapsed;
         if (typeof parsed.activeCategory === 'string') ui.activeCategory = parsed.activeCategory;
         ui.highlightsCollapsed = parsed.highlightsCollapsed === true;
-        if (['home','checklist','notes','picks','names','settings','supports'].indexOf(parsed.view) !== -1) ui.view = parsed.view;
+        if (['home','checklist','notes','picks','names','settings','supports','memos'].indexOf(parsed.view) !== -1) ui.view = parsed.view;
         ui.onboardingDismissed = parsed.onboardingDismissed === true;
         if (typeof parsed.deviceName === 'string') ui.deviceName = parsed.deviceName.slice(0, 12);
         if (parsed.toastRemote === false) ui.toastRemote = false;
@@ -488,7 +504,7 @@
   }
 
   function setView(view) {
-    if (['home','checklist','notes','picks','names','settings','supports'].indexOf(view) === -1) return;
+    if (['home','checklist','notes','picks','names','settings','supports','memos'].indexOf(view) === -1) return;
     if (ui.view === view) return;
     ui.view = view;
     ui.qtyEdit = null;
@@ -524,6 +540,7 @@
     if (vh) vh.hidden = ui.view !== 'home';
     var vs = $('#view-settings'); if (vs) vs.hidden = ui.view !== 'settings';
     var vsp = $('#view-supports'); if (vsp) vsp.hidden = ui.view !== 'supports';
+    var vmm = $('#view-memos'); if (vmm) vmm.hidden = ui.view !== 'memos';
     var hb = $('#ptab-home-count');
     if (hb) { var un = unreadActivityCount(); hb.textContent = un ? (un > 99 ? '99+' : String(un)) : ''; }
     var vc = $('#view-checklist'), vn = $('#view-notes'), vp = $('#view-picks'), vm = $('#view-names');
@@ -1320,22 +1337,67 @@ datesSorted().forEach(function (d) {
     }
   }
 
-  /* ---------- 메모 (홈) ---------- */
-  var memoTimer = null, memoLoggedValue = null;
+  /* ---------- 메모 (목록) ---------- */
+  var memoTimers = {};
+  function findMemo(id) { for (var i = 0; i < state.memos.length; i++) if (state.memos[i].id === id) return state.memos[i]; return null; }
+  function memosSorted() { return state.memos.slice().sort(function (a, b) { return (b.updated || 0) - (a.updated || 0); }); }
+  function memoStamp(t) { return t ? relTime(t) : ''; }
   function renderMemo() {
-    var ta = $('#memo-input');
-    if (!ta) return;
-    if (document.activeElement !== ta && ta.value !== (state.memo || '')) ta.value = state.memo || '';
+    // 홈 카드: 최신 메모 미리보기
+    var prev = $('#memo-preview'); var cnt = $('#memo-count');
+    if (prev) {
+      var list = memosSorted();
+      if (!list.length) prev.innerHTML = '<p class="memo-empty">아직 메모가 없습니다. ‘새 메모’로 적어 두면 여기서 바로 보입니다.</p>';
+      else prev.innerHTML = list.slice(0, 3).map(function (m) {
+        var t = m.text.trim(); var first = t.split('\n')[0]; var more = t.split('\n').length > 1;
+        return '<button type="button" class="memo-preview__item" data-action="open-memo" data-memo-id="' + escapeHtml(m.id) + '"><span class="memo-preview__text">' + escapeHtml(first.slice(0, 80)) + (more || first.length > 80 ? '…' : '') + '</span><span class="memo-preview__time">' + escapeHtml(memoStamp(m.updated)) + '</span></button>';
+      }).join('');
+      if (cnt) cnt.textContent = list.length ? list.length + '개' : '';
+    }
+    // 메모 화면
+    var box = $('#memo-list'); if (!box) return;
+    var items = memosSorted();
+    if (!items.length) { box.innerHTML = '<li class="datecard-empty">메모가 없습니다. ‘새 메모’를 눌러 적어 보세요. 입력하면 자동 저장되고 가족과 공유됩니다.</li>'; return; }
+    box.innerHTML = items.map(function (m) {
+      return '<li class="memo-item" data-memo-id="' + escapeHtml(m.id) + '">' +
+        '<textarea class="memo-item__text" data-focus-key="memo:' + escapeHtml(m.id) + '" rows="3" maxlength="' + MEMO_MAX + '" aria-label="메모 내용" placeholder="내용을 입력하세요">' + escapeHtml(m.text) + '</textarea>' +
+        '<div class="memo-item__foot"><span class="memo-item__time" data-memo-time>' + escapeHtml(m.updated ? '수정 ' + memoStamp(m.updated) : '') + '</span>' +
+        '<button type="button" class="btn btn--small btn--danger" data-action="delete-memo" aria-label="이 메모 삭제">삭제</button></div></li>';
+    }).join('');
+    if (ui.memoFocus) {
+      var ta = document.querySelector('[data-focus-key="memo:' + ui.memoFocus + '"]');
+      ui.memoFocus = null;
+      if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+    }
   }
-  function saveMemoFromInput(final) {
-    var ta = $('#memo-input'); if (!ta) return;
-    var v = ta.value.replace(/\r\n?/g, '\n').slice(0, MEMO_MAX);
-    var status = $('#memo-status');
-    if (v === (state.memo || '')) { if (status) status.textContent = ''; return; }
-    state.memo = v;
+  function newMemo() {
+    var m = { id: uid(), text: '', updated: Date.now() };
+    state.memos.unshift(m);
+    ui.memoFocus = m.id;
+    if (ui.view !== 'memos') setView('memos'); else renderMemo();
+  }
+  function saveMemoText(id, value, final) {
+    var m = findMemo(id); if (!m) return;
+    var v = String(value).replace(/\r\n?/g, '\n').slice(0, MEMO_MAX);
+    if (final && !v.trim()) { // empty on leaving → remove silently
+      state.memos = state.memos.filter(function (x) { return x.id !== id; });
+      commit(); return;
+    }
+    if (v === m.text) return;
+    var wasEmpty = !m.text.trim();
+    m.text = v; m.updated = Date.now();
     saveState();
-    if (status) status.textContent = '저장됨 ' + timeStamp();
-    if (final && memoLoggedValue !== v) { memoLoggedValue = v; act('memo', '메모를 수정함'); }
+    var li = document.querySelector('.memo-item[data-memo-id="' + id + '"] [data-memo-time]');
+    if (li) li.textContent = '저장됨 ' + timeStamp();
+    if (final) { act('memo', wasEmpty ? '메모 추가' : '메모 수정'); renderMemo(); }
+  }
+  function deleteMemo(id) {
+    var idx = -1; for (var i = 0; i < state.memos.length; i++) if (state.memos[i].id === id) idx = i;
+    if (idx < 0) return;
+    var m = state.memos[idx];
+    if (m.text.trim() && !window.confirm('이 메모를 삭제할까요?')) return;
+    state.memos.splice(idx, 1); commit();
+    if (m.text.trim()) { act('memo', '메모 삭제'); showToast('메모를 삭제했습니다.', function () { state.memos.splice(Math.min(idx, state.memos.length), 0, m); commit(); showToast('삭제를 취소했습니다.'); }); }
   }
 
   /* ---------- 변경 기록(알림) ---------- */
@@ -1822,6 +1884,7 @@ datesSorted().forEach(function (d) {
       names: state.names,
       dueDate: state.dueDate,
       memo: state.memo,
+      memos: state.memos,
       supports: state.supports
     }, null, pretty ? 2 : 0);
   }
@@ -1903,7 +1966,7 @@ datesSorted().forEach(function (d) {
     if (el.readOnly || el.disabled) return false; // readonly share-link etc. must not block sync
     if (el.type === 'checkbox' || el.type === 'radio' || el.type === 'file' || el.type === 'button') return false;
     // Only editable fields inside an item/note/highlights editor should defer a remote update.
-    return !!el.closest('.item--edit, .is-qty-editing, .note-form, #highlights-form, #add-category-form, .pick-form, .date-form, .name-form, .support-form, #memo-card, #view-settings');
+    return !!el.closest('.item--edit, .is-qty-editing, .note-form, #highlights-form, #add-category-form, .pick-form, .date-form, .name-form, .support-form, .memo-item, #view-settings');
   }
 
   function applyRemote(remoteState) {
@@ -2172,15 +2235,33 @@ datesSorted().forEach(function (d) {
     var strip = $('#highlights-strip');
     if (strip) strip.addEventListener('click', function () { ui.stripOpen = !ui.stripOpen; renderHighlightsStrip(); });
 
-    // 메모 (홈): 입력 중 자동 저장, 벗어날 때 변경 기록
-    var memoTa = $('#memo-input');
-    if (memoTa) {
-      memoTa.addEventListener('input', function () {
-        var st = $('#memo-status'); if (st) st.textContent = '입력 중…';
-        clearTimeout(memoTimer); memoTimer = setTimeout(function () { saveMemoFromInput(false); }, 600);
+    // 메모: 목록형. 입력 중 자동 저장(0.6초), 벗어날 때 변경 기록
+    var memosView = $('#view-memos');
+    if (memosView) {
+      memosView.addEventListener('input', function (e) {
+        var ta = e.target.closest('.memo-item__text'); if (!ta) return;
+        var id = ta.closest('[data-memo-id]').dataset.memoId;
+        var tEl = ta.closest('.memo-item').querySelector('[data-memo-time]'); if (tEl) tEl.textContent = '입력 중…';
+        clearTimeout(memoTimers[id]); memoTimers[id] = setTimeout(function () { saveMemoText(id, ta.value, false); }, 600);
       });
-      memoTa.addEventListener('blur', function () { clearTimeout(memoTimer); saveMemoFromInput(true); });
+      memosView.addEventListener('focusout', function (e) {
+        var ta = e.target.closest('.memo-item__text'); if (!ta) return;
+        var id = ta.closest('[data-memo-id]').dataset.memoId;
+        clearTimeout(memoTimers[id]); saveMemoText(id, ta.value, true);
+      });
+      memosView.addEventListener('click', function (e) {
+        var b = e.target.closest('button[data-action]'); if (!b) return;
+        if (b.dataset.action === 'new-memo') { newMemo(); return; }
+        if (b.dataset.action === 'delete-memo') { deleteMemo(b.closest('[data-memo-id]').dataset.memoId); }
+      });
     }
+    document.addEventListener('click', function (e) {
+      var t = e.target.closest('[data-action="open-memos"], [data-action="new-memo-home"], [data-action="open-memo"]');
+      if (!t) return;
+      if (t.dataset.action === 'new-memo-home') { newMemo(); return; }
+      if (t.dataset.action === 'open-memo') { ui.memoFocus = t.dataset.memoId; }
+      setView('memos');
+    });
     var actClear = $('#activity-clear');
     if (actClear) actClear.addEventListener('click', function () { markActivitySeen(true); });
 
@@ -2555,7 +2636,7 @@ datesSorted().forEach(function (d) {
     state = loaded.state;
     loadUiPrefs();
     if (!uiPrefsFound) ui.view = 'home';
-    if (ui.view === 'supports') ui.view = 'home';
+    if (ui.view === 'supports' || ui.view === 'memos') ui.view = 'home';
     bindEvents();
     if (loaded.fresh && storageOk) {
       saveState({ initial: true });
@@ -2568,6 +2649,45 @@ datesSorted().forEach(function (d) {
     window.addEventListener('load', bindShareEvents);
   }
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
-  else init();
+  /* ---------- 당겨서 새로고침 (홈 화면 웹앱 전용) ---------- */
+  function setupPullToRefresh() {
+    var standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+    var forced = /[?&]ptr=1/.test(window.location.search);
+    if (!standalone && !forced) return;
+    var el = document.createElement('div');
+    el.id = 'ptr'; el.className = 'ptr'; el.setAttribute('aria-hidden', 'true');
+    el.innerHTML = '<span class="ptr__icon">↓</span><span class="ptr__text">당겨서 새로고침</span>';
+    document.body.appendChild(el);
+    var startY = null, dist = 0, active = false, THRESH = 72;
+    function reset() { active = false; dist = 0; startY = null; el.classList.remove('is-ready', 'is-visible', 'is-loading'); el.style.transform = ''; }
+    document.addEventListener('touchstart', function (e) {
+      if (e.touches.length !== 1 || window.scrollY > 0 || isTyping()) return;
+      startY = e.touches[0].clientY; active = true; dist = 0;
+    }, { passive: true });
+    document.addEventListener('touchmove', function (e) {
+      if (!active) return;
+      dist = e.touches[0].clientY - startY;
+      if (dist <= 0 || window.scrollY > 0) { el.classList.remove('is-visible', 'is-ready'); return; }
+      var d = Math.min(dist, 120);
+      el.classList.add('is-visible');
+      el.classList.toggle('is-ready', dist > THRESH);
+      el.querySelector('.ptr__text').textContent = dist > THRESH ? '놓으면 새로고침' : '당겨서 새로고침';
+      el.style.transform = 'translate(-50%, ' + (d * 0.5) + 'px)';
+    }, { passive: true });
+    document.addEventListener('touchend', function () {
+      if (!active) return;
+      if (dist > THRESH) {
+        el.classList.add('is-loading'); el.querySelector('.ptr__text').textContent = '새로고침 중…';
+        window.__ptrTriggered = true;
+        if (!window.__ptrTest) setTimeout(function () { window.location.reload(); }, 150);
+        else setTimeout(reset, 300);
+        return;
+      }
+      reset();
+    }, { passive: true });
+    document.addEventListener('touchcancel', reset, { passive: true });
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { init(); setupPullToRefresh(); });
+  else { init(); setupPullToRefresh(); }
 })();

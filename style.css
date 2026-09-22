@@ -268,6 +268,33 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .home-link__body small { display: block; color: var(--muted); font-size: 0.8rem; margin-top: 2px; }
 .home-link__chev { transform: rotate(-45deg); margin: 0 4px 0 0; }
 
+/* ---------- 메모 ---------- */
+.memo-preview { margin-top: 8px; display: grid; gap: 4px; }
+.memo-preview__item { width: 100%; display: flex; align-items: baseline; gap: 8px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: #fffdfb; cursor: pointer; font: inherit; text-align: left; color: var(--text); }
+.memo-preview__item:hover { border-color: var(--peach); }
+.memo-preview__text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.memo-preview__time { flex-shrink: 0; font-size: 0.75rem; color: var(--muted); }
+.memo-empty { margin: 0; font-size: 0.88rem; color: var(--muted); }
+#view-memos { margin-top: 6px; }
+.memo-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 10px; }
+@media (min-width: 720px) { .memo-list { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; } }
+.memo-item { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 10px 12px; }
+.memo-item__text { width: 100%; min-height: 90px; padding: 8px 10px; border: 1px solid transparent; border-radius: 8px; background: #fffdfb; resize: vertical; line-height: 1.55; font-size: 0.95rem; }
+.memo-item__text:focus { border-color: var(--peach-strong); outline: none; background: #fff; }
+.memo-item__foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 6px; }
+.memo-item__time { font-size: 0.78rem; color: var(--muted); }
+
+/* ---------- 당겨서 새로고침 ---------- */
+.ptr { position: fixed; top: 6px; left: 50%; transform: translate(-50%, 0); z-index: 60; display: flex; align-items: center; gap: 6px;
+  padding: 6px 12px; border-radius: 999px; background: var(--card); border: 1px solid var(--border); box-shadow: var(--shadow);
+  font-size: 0.82rem; color: var(--muted); opacity: 0; pointer-events: none; transition: opacity 0.15s; }
+.ptr.is-visible { opacity: 1; }
+.ptr__icon { display: inline-block; transition: transform 0.15s; }
+.ptr.is-ready { color: var(--peach-strong); border-color: var(--peach); }
+.ptr.is-ready .ptr__icon { transform: rotate(180deg); }
+.ptr.is-loading .ptr__icon { animation: ptr-spin 0.8s linear infinite; }
+@keyframes ptr-spin { to { transform: rotate(360deg); } }
+
 /* ---------- 설정 ---------- */
 .settings__title { font-size: 1.15rem; margin: 6px 0 4px; }
 .settings-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 12px 14px; margin-top: 10px; display: grid; gap: 8px; }
@@ -635,7 +662,8 @@ input[type="number"] { -moz-appearance: textfield; }
 .item__edit-grid { display: grid; gap: 8px; }
 .field { display: grid; gap: 4px; }
 .field > label, .field__label { font-size: 0.8rem; color: var(--muted); }
-.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.field-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+.field-row > .field { min-width: 0; }
 .field-row--unit { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 .item__actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 2px; }
 .item__actions .field { flex: 1 1 140px; }
@@ -739,15 +767,17 @@ input[type="number"] { -moz-appearance: textfield; }
   width: 100%; min-height: 140px; padding: 10px 12px; border: 1px solid var(--border);
   border-radius: 10px; background: #fff; resize: vertical; line-height: 1.5;
 }
-input[type="date"] {
+input[type="date"], input[type="time"] {
   min-height: var(--tap); padding: 8px 12px; border: 1px solid var(--border); border-radius: 10px;
-  background: #fff; width: 100%; min-width: 0;
+  background: #fff; width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box;
+  -webkit-appearance: none; appearance: none; font: inherit;
 }
+input[type="date"]::-webkit-date-and-time-value { text-align: left; }
 .note-form__actions { display: flex; gap: 8px; flex-wrap: wrap; }
 @media (max-width: 480px) {
   .notes__head { flex-wrap: wrap; }
   .notes__head .btn { width: 100%; }
-  .note-form .field-row { grid-template-columns: 1fr; }
+  .note-form .field-row, .date-form .field-row, .support-form .field-row { grid-template-columns: 1fr; }
 }
 
 /* ---------- Toast ---------- */
