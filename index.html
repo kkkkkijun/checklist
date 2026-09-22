@@ -15,14 +15,14 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="마미백">
   <meta name="mobile-web-app-capable" content="yes">
-  <link rel="stylesheet" href="./style.css?v=20260922d">
+  <link rel="stylesheet" href="./style.css?v=20260922e">
 </head>
 <body>
   <a class="skip-link" href="#main-area">본문으로 건너뛰기</a>
 
   <header class="app-header">
     <div class="app-header__row">
-      <h1 class="app-title">마미백💜</h1>
+      <h1 class="app-title"><button type="button" class="app-title__btn" data-action="go-home" aria-label="마미백 홈으로">마미백💜</button></h1>
       <button type="button" class="dday-pill" id="dday-pill" data-action="open-settings" hidden aria-label="출산 예정일까지 남은 날. 누르면 설정"></button>
       <button type="button" class="sync-pill" id="sync-status" data-action="open-share" aria-live="polite">공유 연결하기</button>
     </div>
@@ -285,9 +285,9 @@
     <button type="button" class="toast__close" id="toast-close" aria-label="알림 닫기">×</button>
   </div>
 
-  <script src="./firebase-config.js?v=20260922d"></script>
-  <script src="./app.js?v=20260922d"></script>
-  <script src="./sync.js?v=20260922d"></script>
+  <script src="./firebase-config.js?v=20260922e"></script>
+  <script src="./app.js?v=20260922e"></script>
+  <script src="./sync.js?v=20260922e"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function () {
