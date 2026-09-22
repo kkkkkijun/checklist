@@ -15,79 +15,39 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="마미백">
   <meta name="mobile-web-app-capable" content="yes">
-  <link rel="stylesheet" href="./style.css?v=20260922a">
+  <link rel="stylesheet" href="./style.css?v=20260922b">
 </head>
 <body>
-  <a class="skip-link" href="#categories">본문으로 건너뛰기</a>
+  <a class="skip-link" href="#main-area">본문으로 건너뛰기</a>
 
   <header class="app-header">
-    <div class="app-header__top">
-      <div class="app-header__title">
-        <div class="app-title-row">
-          <button type="button" class="home-btn" id="home-btn" aria-label="홈으로 (처음 화면으로 이동)" title="홈으로"><span aria-hidden="true">🏠</span></button>
-          <h1 class="app-title">마미백💜</h1>
+    <div class="app-header__row">
+      <h1 class="app-title">마미백💜</h1>
+      <button type="button" class="sync-pill" id="sync-status" data-action="open-share" aria-live="polite">공유 연결하기</button>
+      <details class="menu" id="backup-menu">
+        <summary class="menu__btn" aria-label="메뉴 열기">⋯</summary>
+        <div class="menu__panel">
+          <button type="button" class="menu__item" id="share-btn">👨‍👩‍👧 가족 공유</button>
+          <hr class="menu__sep">
+          <button type="button" class="menu__item" id="export-btn">JSON 파일로 내보내기</button>
+          <button type="button" class="menu__item" id="import-btn">JSON 파일 불러오기</button>
+          <button type="button" class="menu__item" id="copy-text-btn">텍스트로 복사 (다른 기기로 옮기기)</button>
+          <button type="button" class="menu__item" id="paste-text-btn">텍스트 붙여넣어 불러오기</button>
+          <input type="file" id="import-file" accept="application/json,.json" class="visually-hidden" tabindex="-1" aria-hidden="true">
+          <hr class="menu__sep">
+          <button type="button" class="menu__item menu__item--danger" id="reset-btn">기본 목록으로 초기화</button>
+          <p class="menu__help" id="save-status" role="status"></p>
         </div>
-        <p class="save-status" id="save-status" role="status" aria-live="polite"></p>
-        <p class="sync-status" id="sync-status" role="status" aria-live="polite" hidden></p>
-      </div>
-      <div class="toolbar__actions">
-        <button type="button" class="btn btn--toggle toolbar__edit-desktop" id="edit-mode-toggle" data-edit-toggle="long" aria-pressed="false">편집 모드</button>
-        <button type="button" class="btn btn--primary" id="add-category-btn">분류 추가</button>
-        <button type="button" class="btn" id="share-btn">가족 공유</button>
-        <details class="menu" id="backup-menu">
-          <summary class="btn">백업</summary>
-          <div class="menu__panel">
-            <button type="button" class="menu__item" id="export-btn">JSON 파일로 내보내기</button>
-            <button type="button" class="menu__item" id="import-btn">JSON 파일 불러오기</button>
-            <hr class="menu__sep">
-            <button type="button" class="menu__item" id="copy-text-btn">텍스트로 복사 (다른 기기로 옮기기)</button>
-            <button type="button" class="menu__item" id="paste-text-btn">텍스트 붙여넣어 불러오기</button>
-            <hr class="menu__sep">
-            <button type="button" class="menu__item menu__item--danger" id="reset-btn">기본 목록으로 초기화</button>
-            <input type="file" id="import-file" accept="application/json,.json" class="visually-hidden" tabindex="-1" aria-hidden="true">
-            <p class="menu__help">불러오기는 현재 목록을 통째로 교체합니다. 기기 간 옮길 때는 ‘텍스트로 복사’ 후 메신저로 보내고, 받은 기기에서 ‘붙여넣어 불러오기’를 쓰세요.</p>
-          </div>
-        </details>
-      </div>
+      </details>
     </div>
-
-    <section class="highlights" id="highlights" aria-labelledby="highlights-title">
-      <div class="highlights__head">
-        <h2 id="highlights-title" class="highlights__title">
-          <button type="button" class="highlights__toggle" id="highlights-toggle" aria-expanded="true" aria-controls="highlights-body">
-            <span>⭐ 꼭 기억하기 <span class="highlights__count" id="highlights-count"></span></span>
-            <span class="category__chevron" aria-hidden="true"></span>
-            <span class="visually-hidden" id="highlights-toggle-label">접기</span>
-          </button>
-        </h2>
-        <button type="button" class="btn btn--small" id="highlights-edit-btn">수정</button>
-      </div>
-      <div id="highlights-body"></div>
-    </section>
+    <button type="button" class="hl-strip" id="highlights-strip" hidden aria-expanded="false" aria-controls="highlights-strip-body">
+      <span class="hl-strip__star" aria-hidden="true">⭐</span>
+      <span class="hl-strip__text" id="highlights-strip-text"></span>
+      <span class="hl-strip__more" id="highlights-strip-more"></span>
+      <span class="category__chevron" aria-hidden="true"></span>
+    </button>
+    <div class="hl-strip__body" id="highlights-strip-body" hidden></div>
   </header>
-
-  <nav class="primary-tabs" id="primary-tabs" role="tablist" aria-label="화면 선택">
-    <button type="button" class="primary-tab is-active" data-view="checklist" role="tab" aria-selected="true" aria-controls="view-checklist" id="ptab-checklist">
-      <span class="primary-tab__icon" aria-hidden="true">🧳</span>
-      <span class="primary-tab__label">출산가방 준비물</span>
-      <span class="primary-tab__count" id="ptab-checklist-count"></span>
-    </button>
-    <button type="button" class="primary-tab" data-view="notes" role="tab" aria-selected="false" aria-controls="view-notes" id="ptab-notes" tabindex="-1">
-      <span class="primary-tab__icon" aria-hidden="true">🏥</span>
-      <span class="primary-tab__label">산부인과 진료 메모</span>
-      <span class="primary-tab__count" id="ptab-notes-count"></span>
-    </button>
-    <button type="button" class="primary-tab" data-view="picks" role="tab" aria-selected="false" aria-controls="view-picks" id="ptab-picks" tabindex="-1">
-      <span class="primary-tab__icon" aria-hidden="true">📅</span>
-      <span class="primary-tab__label">택일 정보</span>
-      <span class="primary-tab__count" id="ptab-picks-count"></span>
-    </button>
-    <button type="button" class="primary-tab" data-view="names" role="tab" aria-selected="false" aria-controls="view-names" id="ptab-names" tabindex="-1">
-      <span class="primary-tab__icon" aria-hidden="true">✍️</span>
-      <span class="primary-tab__label">작명 노트</span>
-      <span class="primary-tab__count" id="ptab-names-count"></span>
-    </button>
-  </nav>
 
   <section class="share" id="share-panel" aria-labelledby="share-title" hidden>
     <div class="share__head">
@@ -108,35 +68,80 @@
 
   <p class="notice notice--warn" id="storage-warning" hidden></p>
 
-  <section id="view-checklist" class="view" role="tabpanel" aria-labelledby="ptab-checklist">
-    <section class="progress-card" aria-labelledby="overall-progress-title">
-      <div class="progress-head">
-        <h2 id="overall-progress-title" class="progress-title">전체 진행률</h2>
-        <p class="progress-text" id="overall-progress-text"></p>
+  <div id="main-area">
+
+  <section id="view-home" class="view home" role="tabpanel" aria-labelledby="ptab-home" hidden>
+    <section class="onboard" id="onboard" hidden aria-labelledby="onboard-title">
+      <div class="onboard__head">
+        <h2 id="onboard-title" class="onboard__title">처음이신가요? 3단계면 끝나요</h2>
+        <button type="button" class="onboard__close" data-action="ob-dismiss" aria-label="안내 닫기">×</button>
       </div>
-      <div class="progress-bar" role="progressbar" id="overall-progress-bar"
-           aria-labelledby="overall-progress-title" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-        <div class="progress-bar__fill" id="overall-progress-fill"></div>
-      </div>
-      <p class="progress-hint">체크는 <strong>‘가방에 담기 완료’</strong>를 뜻합니다. 구매 여부와는 별개예요.</p>
+      <ol class="onboard__steps">
+        <li><button type="button" class="onboard__step" data-action="ob-edit"><span class="onboard__num">1</span><span><strong>목록 다듬기</strong><small>참고용 목록을 병원·조리원 안내에 맞게 고칩니다</small></span></button></li>
+        <li><button type="button" class="onboard__step" data-action="ob-share"><span class="onboard__num">2</span><span><strong>배우자와 공유</strong><small>공유 링크를 보내면 두 폰이 함께 움직여요</small></span></button></li>
+        <li><button type="button" class="onboard__step" data-action="ob-check"><span class="onboard__num">3</span><span><strong>담으면서 체크</strong><small>체크는 ‘가방에 담기 완료’를 뜻해요</small></span></button></li>
+      </ol>
     </section>
 
-    <div class="search" id="search-wrap">
-      <span class="search__icon" aria-hidden="true">🔍</span>
-      <label class="visually-hidden" for="item-search">준비물 검색</label>
-      <input type="search" id="item-search" placeholder="준비물 검색 (모든 분류에서 찾기)" autocomplete="off" enterkeyhint="search">
-      <button type="button" class="search__clear" id="search-clear" aria-label="검색어 지우기" hidden>×</button>
+    <section class="home-card" aria-labelledby="home-progress-title">
+      <div class="progress-head">
+        <h2 id="home-progress-title" class="home-card__title">🧳 준비 진행률</h2>
+        <p class="progress-text" id="home-progress-text"></p>
+      </div>
+      <div class="progress-bar" role="progressbar" id="home-progress-bar" aria-labelledby="home-progress-title" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <div class="progress-bar__fill" id="home-progress-fill"></div>
+      </div>
+      <ul class="home-cats" id="home-cats"></ul>
+      <button type="button" class="btn btn--primary home-card__cta" data-action="go-checklist">준비물 체크하러 가기</button>
+    </section>
+
+    <section class="highlights" id="highlights" aria-labelledby="highlights-title">
+      <div class="highlights__head">
+        <h2 id="highlights-title" class="highlights__title">
+          <button type="button" class="highlights__toggle" id="highlights-toggle" aria-expanded="true" aria-controls="highlights-body">
+            <span>⭐ 꼭 기억하기 <span class="highlights__count" id="highlights-count"></span></span>
+            <span class="category__chevron" aria-hidden="true"></span>
+            <span class="visually-hidden" id="highlights-toggle-label">접기</span>
+          </button>
+        </h2>
+        <button type="button" class="btn btn--small" id="highlights-edit-btn">수정</button>
+      </div>
+      <div id="highlights-body"></div>
+    </section>
+
+    <section class="home-card home-share" id="home-share" aria-labelledby="home-share-title">
+      <h2 id="home-share-title" class="home-card__title">👨‍👩‍👧 가족 공유</h2>
+      <p class="home-share__text" id="home-share-text"></p>
+      <button type="button" class="btn btn--small" data-action="open-share" id="home-share-btn">공유 설정 열기</button>
+    </section>
+  </section>
+
+  <section id="view-checklist" class="view" role="tabpanel" aria-labelledby="ptab-checklist" hidden>
+    <div class="progress-line" role="progressbar" id="overall-progress-bar" aria-labelledby="overall-progress-title" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+      <span class="visually-hidden" id="overall-progress-title">전체 진행률</span>
+      <span class="progress-line__bar"><span class="progress-bar__fill" id="overall-progress-fill"></span></span>
+      <span class="progress-line__text" id="overall-progress-text"></span>
     </div>
 
     <div class="toolbar">
-      <fieldset class="filter-group" id="filter-group">
-        <legend class="visually-hidden">보기 필터</legend>
-        <label class="filter-option"><input type="radio" name="filter" value="all" checked><span>전체</span></label>
-        <label class="filter-option"><input type="radio" name="filter" value="todo"><span>미완료</span></label>
-        <label class="filter-option"><input type="radio" name="filter" value="done"><span>완료</span></label>
-        <label class="filter-option"><input type="radio" name="filter" value="excluded"><span>제외</span></label>
-      </fieldset>
-      <button type="button" class="btn btn--toggle toolbar__edit-mobile" id="edit-mode-toggle-sticky" data-edit-toggle="short" aria-pressed="false">편집</button>
+      <div class="ctrl-row">
+        <button type="button" class="ctrl-btn" id="search-toggle" aria-pressed="false" aria-label="준비물 검색">🔍</button>
+        <div class="ctrl-filter" id="filter-group">
+          <label class="visually-hidden" for="filter-select">보기 필터</label>
+          <select id="filter-select" name="filter">
+            <option value="all">전체</option>
+            <option value="todo">미완료만</option>
+            <option value="done">완료만</option>
+            <option value="excluded">제외만</option>
+          </select>
+        </div>
+        <button type="button" class="btn btn--toggle ctrl-edit" id="edit-mode-toggle-sticky" data-edit-toggle="short" aria-pressed="false">편집</button>
+      </div>
+      <div class="search" id="search-wrap" hidden>
+        <label class="visually-hidden" for="item-search">준비물 검색</label>
+        <input type="search" id="item-search" placeholder="모든 분류에서 준비물 찾기" autocomplete="off" enterkeyhint="search">
+        <button type="button" class="search__clear" id="search-clear" aria-label="검색어 지우기" hidden>×</button>
+      </div>
       <div class="category-tabs" id="category-tabs" role="tablist" aria-label="분류 선택"></div>
     </div>
 
@@ -147,17 +152,14 @@
       <button type="button" class="btn" id="add-category-cancel">취소</button>
     </form>
 
-    <p class="notice notice--template">참고용 준비물 목록입니다. 병원·조리원 준비물 안내에 맞춰 목록과 수량을 수정하세요.</p>
-
     <main id="categories" class="categories" aria-label="분류별 준비물"></main>
   </section>
 
   <section id="view-notes" class="view notes" role="tabpanel" aria-labelledby="ptab-notes" hidden>
     <div class="notes__head">
-      <h2 id="notes-title" class="notes__title">🏥 산부인과 진료 메모 <span class="notes__count" id="notes-count"></span></h2>
-      <button type="button" class="btn btn--primary" id="add-note-btn">메모 추가</button>
+      <h2 id="notes-title" class="notes__title">🏥 산부인과 일지 <span class="notes__count" id="notes-count"></span></h2>
+      <button type="button" class="btn btn--primary btn--small" id="add-note-btn">일지 쓰기</button>
     </div>
-    <p class="notice notes__hint">진료 때 들은 내용, 검사 결과, 다음 일정을 날짜별로 남겨 두세요. 준비물 체크와 섞이지 않고, 같은 기기·백업·가족 공유에 함께 저장됩니다.</p>
     <ul class="notes-list" id="notes-list"></ul>
   </section>
 
@@ -166,12 +168,11 @@
       <h2 class="datecands__title">📅 택일 후보</h2>
       <button type="button" class="btn btn--primary btn--small" id="add-date-btn">후보 추가</button>
     </div>
-    <p class="notice">확정·후보 날짜를 등록하면 작명 노트의 이름 후보와 서로 연결됩니다.</p>
     <ul class="datecard-list" id="date-list"></ul>
 
     <hr class="view-sep">
 
-    <p class="notice picks__hint">참고 메모 — GPT와 Claude에게 받은 택일 설명을 각각 붙여넣어 보관하세요. 위 택일 후보와 함께 저장·백업·가족 공유에 포함됩니다.</p>
+    <p class="notice picks__hint">참고 메모 — GPT와 Claude에게 받은 택일 설명을 붙여넣어 보관하세요.</p>
     <div class="category-tabs pick-tabs" id="pick-tabs" role="tablist" aria-label="택일 정보 선택"></div>
     <article class="pick" id="pick-gpt" data-pick="gpt">
       <div class="pick__head">
@@ -192,15 +193,43 @@
   <section id="view-names" class="view names" role="tabpanel" aria-labelledby="ptab-names" hidden>
     <div class="notes__head">
       <h2 class="notes__title">✍️ 작명 노트 <span class="notes__count" id="name-count"></span></h2>
-      <button type="button" class="btn btn--primary" id="add-name-btn">이름 추가</button>
+      <button type="button" class="btn btn--primary btn--small" id="add-name-btn">이름 추가</button>
     </div>
-    <p class="notice notes__hint">한글 이름과 한자 풀이 후보를 적고, 택일 후보와 연결해 종합하세요. 별(★)로 마음에 드는 이름을 위로 고정할 수 있습니다.</p>
     <ul class="namecard-list" id="name-list"></ul>
   </section>
 
+  </div>
+
   <footer class="app-footer">
-    <p class="notice">기록은 이 기기의 브라우저에 저장됩니다. 브라우저 데이터를 삭제하면 기록이 사라질 수 있으니 <strong>백업</strong> 메뉴에서 JSON으로 내보내 두세요. 여러 기기에서 함께 쓰려면 <strong>가족 공유</strong>를 사용하세요.</p>
+    <p class="notice">기록은 이 기기의 브라우저에 저장됩니다. 브라우저 데이터를 삭제하면 사라질 수 있으니 ⋯ 메뉴의 <strong>백업</strong>으로 내보내 두세요. 두 사람이 함께 쓰려면 <strong>가족 공유</strong>를 연결하세요.</p>
   </footer>
+
+  <nav class="bottom-nav" id="primary-tabs" role="tablist" aria-label="화면 선택">
+    <button type="button" class="primary-tab is-active" data-view="home" role="tab" aria-selected="true" aria-controls="view-home" id="ptab-home">
+      <span class="primary-tab__icon" aria-hidden="true">🏠</span>
+      <span class="primary-tab__label">홈</span>
+    </button>
+    <button type="button" class="primary-tab" data-view="checklist" role="tab" aria-selected="false" aria-controls="view-checklist" id="ptab-checklist" tabindex="-1">
+      <span class="primary-tab__icon" aria-hidden="true">🧳</span>
+      <span class="primary-tab__label">준비물</span>
+      <span class="primary-tab__count" id="ptab-checklist-count"></span>
+    </button>
+    <button type="button" class="primary-tab" data-view="notes" role="tab" aria-selected="false" aria-controls="view-notes" id="ptab-notes" tabindex="-1">
+      <span class="primary-tab__icon" aria-hidden="true">🏥</span>
+      <span class="primary-tab__label">일지</span>
+      <span class="primary-tab__count" id="ptab-notes-count"></span>
+    </button>
+    <button type="button" class="primary-tab" data-view="picks" role="tab" aria-selected="false" aria-controls="view-picks" id="ptab-picks" tabindex="-1">
+      <span class="primary-tab__icon" aria-hidden="true">📅</span>
+      <span class="primary-tab__label">택일</span>
+      <span class="primary-tab__count" id="ptab-picks-count"></span>
+    </button>
+    <button type="button" class="primary-tab" data-view="names" role="tab" aria-selected="false" aria-controls="view-names" id="ptab-names" tabindex="-1">
+      <span class="primary-tab__icon" aria-hidden="true">✍️</span>
+      <span class="primary-tab__label">작명</span>
+      <span class="primary-tab__count" id="ptab-names-count"></span>
+    </button>
+  </nav>
 
   <div class="toast" id="toast" role="status" aria-live="polite" hidden>
     <span class="toast__text" id="toast-text"></span>
@@ -208,9 +237,9 @@
     <button type="button" class="toast__close" id="toast-close" aria-label="알림 닫기">×</button>
   </div>
 
-  <script src="./firebase-config.js?v=20260922a"></script>
-  <script src="./app.js?v=20260922a"></script>
-  <script src="./sync.js?v=20260922a"></script>
+  <script src="./firebase-config.js?v=20260922b"></script>
+  <script src="./app.js?v=20260922b"></script>
+  <script src="./sync.js?v=20260922b"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function () {

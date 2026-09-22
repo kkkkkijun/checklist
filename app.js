@@ -325,7 +325,7 @@
 
   /* ---------- state ---------- */
   var state;
-  var ui = { filter: 'all', editMode: false, pendingUndo: null, undoTimer: null, collapsed: {}, noteForm: null, qtyEdit: null, highlightEdit: false, activeCategory: null, highlightsCollapsed: false, itemEdit: null, view: 'checklist', picksEdit: null, picksActive: 'gpt', dateEdit: null, nameEdit: null, search: '' };
+  var ui = { filter: 'all', editMode: false, pendingUndo: null, undoTimer: null, collapsed: {}, noteForm: null, qtyEdit: null, highlightEdit: false, activeCategory: null, highlightsCollapsed: false, itemEdit: null, view: 'checklist', picksEdit: null, picksActive: 'gpt', dateEdit: null, nameEdit: null, search: '', searchOpen: false, stripOpen: false, onboardingDismissed: false };
 
   // Active tab (narrow screens): falls back to the first category when the saved one is gone.
   function activeCategoryId() {
@@ -348,16 +348,19 @@
     renderHighlights();
   }
 
+  var uiPrefsFound = false;
   function loadUiPrefs() {
     try {
       var raw = window.localStorage.getItem(UI_KEY);
       if (!raw) return;
+      uiPrefsFound = true;
       var parsed = JSON.parse(raw);
       if (parsed && typeof parsed === 'object') {
         if (parsed.collapsed && typeof parsed.collapsed === 'object') ui.collapsed = parsed.collapsed;
         if (typeof parsed.activeCategory === 'string') ui.activeCategory = parsed.activeCategory;
         ui.highlightsCollapsed = parsed.highlightsCollapsed === true;
-        if (['checklist','notes','picks','names'].indexOf(parsed.view) !== -1) ui.view = parsed.view;
+        if (['home','checklist','notes','picks','names'].indexOf(parsed.view) !== -1) ui.view = parsed.view;
+        ui.onboardingDismissed = parsed.onboardingDismissed === true;
         if (parsed.picksActive === 'gpt' || parsed.picksActive === 'claude') ui.picksActive = parsed.picksActive;
       }
     } catch (e) { /* UI preferences are optional */ }
@@ -373,6 +376,7 @@
         activeCategory: ui.activeCategory,
         picksActive: ui.picksActive,
         view: ui.view,
+        onboardingDismissed: ui.onboardingDismissed,
         highlightsCollapsed: ui.highlightsCollapsed
       }));
     } catch (e) { /* ignore */ }
@@ -451,7 +455,7 @@
   }
 
   function setView(view) {
-    if (['checklist','notes','picks','names'].indexOf(view) === -1) return;
+    if (['home','checklist','notes','picks','names'].indexOf(view) === -1) return;
     if (ui.view === view) return;
     ui.view = view;
     ui.qtyEdit = null;
@@ -460,8 +464,7 @@
     ui.nameEdit = null;
     saveUiPrefs();
     render();
-    var content = document.getElementById(view === 'notes' ? 'view-notes' : 'view-checklist');
-    if (content) { var h = content.querySelector('h2'); if (h) h.setAttribute('tabindex', '-1'); }
+    window.scrollTo(0, 0);
   }
 
   function renderPrimaryTabs() {
@@ -482,6 +485,8 @@
       btn.setAttribute('aria-selected', active ? 'true' : 'false');
       btn.tabIndex = active ? 0 : -1;
     });
+    var vh = $('#view-home');
+    if (vh) vh.hidden = ui.view !== 'home';
     var vc = $('#view-checklist'), vn = $('#view-notes'), vp = $('#view-picks'), vm = $('#view-names');
     if (vc) vc.hidden = ui.view !== 'checklist';
     if (vn) vn.hidden = ui.view !== 'notes';
@@ -515,8 +520,14 @@
     updateTabScroll($('#primary-tabs'));
     updateTabScroll($('#category-tabs'));
     updateTabScroll($('#pick-tabs'));
+    renderHome();
+    renderHighlightsStrip();
     var searchBox = $('#search-wrap');
-    if (searchBox) searchBox.hidden = ui.editMode || ui.view !== 'checklist';
+    if (searchBox) searchBox.hidden = !ui.searchOpen || ui.editMode || ui.view !== 'checklist';
+    var st = $('#search-toggle');
+    if (st) { st.setAttribute('aria-pressed', ui.searchOpen ? 'true' : 'false'); st.classList.toggle('is-active', ui.searchOpen || !!ui.search); }
+    var fs = $('#filter-select');
+    if (fs && fs.value !== ui.filter) fs.value = ui.filter;
     Array.prototype.forEach.call(document.querySelectorAll('[data-edit-toggle]'), function (b) {
       b.setAttribute('aria-pressed', ui.editMode ? 'true' : 'false');
       b.textContent = ui.editMode ? '편집 완료' : (b.dataset.editToggle === 'short' ? '편집' : '편집 모드');
@@ -595,7 +606,7 @@
     }
     if (catTabs) catTabs.hidden = false;
     if (state.categories.length === 0) {
-      root.innerHTML = '<div class="empty-state"><p>분류가 없습니다.</p><p>상단의 <strong>분류 추가</strong> 버튼으로 다시 시작할 수 있어요.</p></div>';
+      root.innerHTML = '<div class="empty-state"><p>분류가 없습니다.</p><p>분류 탭의 <strong>+</strong> 버튼으로 다시 시작할 수 있어요.</p></div>';
       return;
     }
     root.innerHTML = state.categories.map(renderCategory).join('');
@@ -711,7 +722,7 @@
       html += '<button type="button" class="btn btn--small" data-action="toggle-excluded" data-focus-key="excl:' + id + '" aria-label="' + escapeHtml(it.name) + ' 다시 포함">다시 포함</button>';
     } else {
       var label = qtyLabel(it);
-      html += '<button type="button" class="item__qty' + (label ? '' : ' item__qty--empty') + '" data-action="edit-qty" data-focus-key="qty-btn:' + id + '" aria-expanded="' + (editing ? 'true' : 'false') + '" aria-label="' + escapeHtml(it.name) + ' 필요 수량 ' + (label ? escapeHtml(label) : '미입력') + ', 누르면 수정">' + (label ? escapeHtml(label) : '미입력') + '</button>';
+      html += '<button type="button" class="item__qty' + (label ? '' : ' item__qty--empty') + '" data-action="edit-qty" data-focus-key="qty-btn:' + id + '" aria-expanded="' + (editing ? 'true' : 'false') + '" aria-label="' + escapeHtml(it.name) + ' 필요 수량 ' + (label ? escapeHtml(label) : '미입력') + ', 누르면 수정">' + (label ? escapeHtml(label) : '<span aria-hidden="true">＋</span>') + '</button>';
     }
     html += '</div></div>';
     if (editing) {
@@ -1209,6 +1220,50 @@ datesSorted().forEach(function (d) {
     });
   }
 
+  /* ---------- 홈 (개요) ---------- */
+  function renderHome() {
+    if (!$('#view-home')) return;
+    var p = computeProgress(state.items);
+    var txt = progressText(p);
+    $('#home-progress-text').textContent = txt;
+    $('#home-progress-fill').style.width = p.percent + '%';
+    $('#home-progress-bar').setAttribute('aria-valuenow', String(p.percent));
+    $('#home-progress-bar').setAttribute('aria-valuetext', txt);
+    $('#home-cats').innerHTML = state.categories.map(function (cat) {
+      var cp = computeProgress(itemsOf(cat.id));
+      return '<li><button type="button" class="home-cat" data-action="go-category" data-category-id="' + escapeHtml(cat.id) + '">' +
+        '<span class="home-cat__name">' + (cat.icon ? escapeHtml(cat.icon) + ' ' : '') + escapeHtml(cat.name) + '</span>' +
+        '<span class="home-cat__bar"><span style="width:' + cp.percent + '%"></span></span>' +
+        '<span class="home-cat__num">' + (cp.total ? cp.done + '/' + cp.total : '0') + '</span></button></li>';
+    }).join('');
+    var ob = $('#onboard');
+    if (ob) ob.hidden = ui.onboardingDismissed;
+    var S = window.ChecklistSync;
+    var st = S ? S.getState() : { configured: false, status: 'unconfigured', roomId: null };
+    var t = $('#home-share-text'), b = $('#home-share-btn');
+    if (t) {
+      if (!st.configured) t.textContent = '이 사이트에 공유 설정이 없어 기록이 이 기기에만 저장됩니다.';
+      else if (st.roomId) t.textContent = (st.status === 'online' ? '연결됨 — ' : st.status === 'offline' ? '오프라인 — ' : '') + '같은 링크를 연 기기끼리 실시간으로 함께 바뀝니다.';
+      else t.textContent = '아직 연결되지 않았습니다. 공유 링크를 만들어 배우자 폰에서 열면 두 폰이 함께 움직여요.';
+    }
+    if (b) b.textContent = st.roomId ? '공유 설정 열기' : '공유 링크 만들기';
+  }
+
+  function renderHighlightsStrip() {
+    var strip = $('#highlights-strip'), body = $('#highlights-strip-body');
+    if (!strip) return;
+    var lines = state.highlights ? state.highlights.split('\n') : [];
+    var show = ui.view !== 'home' && lines.length > 0;
+    strip.hidden = !show;
+    if (!show) { body.hidden = true; return; }
+    $('#highlights-strip-text').textContent = lines[0];
+    $('#highlights-strip-more').textContent = lines.length > 1 ? '외 ' + (lines.length - 1) + '개' : '';
+    strip.setAttribute('aria-expanded', ui.stripOpen ? 'true' : 'false');
+    strip.classList.toggle('is-open', ui.stripOpen);
+    body.hidden = !ui.stripOpen;
+    body.innerHTML = '<ul class="highlights-list">' + lines.map(function (l) { return '<li>' + escapeHtml(l) + '</li>'; }).join('') + '</ul>';
+  }
+
   /* ---------- 꼭 기억하기 (상단 고정) ---------- */
   function renderHighlights() {
     var box = $('#highlights-body');
@@ -1491,7 +1546,7 @@ datesSorted().forEach(function (d) {
     var qtyBtn = $('.item__qty', rowEl);
     if (qtyBtn) {
       var label = qtyLabel(it);
-      qtyBtn.textContent = label || '미입력';
+      if (label) qtyBtn.textContent = label; else qtyBtn.innerHTML = '<span aria-hidden="true">＋</span>';
       qtyBtn.classList.toggle('item__qty--empty', !label);
       qtyBtn.setAttribute('aria-label', it.name + ' 필요 수량 ' + (label || '미입력') + ', 누르면 수정');
     }
@@ -1646,9 +1701,12 @@ datesSorted().forEach(function (d) {
     var badge = $('#sync-status');
     var S = window.ChecklistSync;
     var st = S ? S.getState() : { configured: false, status: 'unconfigured', roomId: null, link: '' };
-    badge.textContent = syncStatusText(st);
-    badge.className = 'sync-status' + (st.status === 'online' ? ' is-online' : st.status === 'error' ? ' is-error' : st.status === 'offline' ? ' is-offline' : '');
-    badge.hidden = !badge.textContent;
+    var pillText = syncStatusText(st);
+    if (!pillText) pillText = st.configured ? '공유 연결하기' : '기기 저장';
+    badge.textContent = pillText;
+    badge.className = 'sync-pill' + (st.status === 'online' ? ' is-online' : st.status === 'error' ? ' is-error' : st.status === 'offline' ? ' is-offline' : st.configured ? ' is-off' : ' is-local');
+    badge.hidden = false;
+    renderHome();
     if (panel.hidden) return;
     var html = '';
     if (!st.configured) {
@@ -1676,8 +1734,26 @@ datesSorted().forEach(function (d) {
     return p(d.getHours()) + ':' + p(d.getMinutes());
   }
 
+  function openSharePanel() {
+    var panel = $('#share-panel');
+    panel.hidden = false;
+    var acf = $('#add-category-form'); if (acf) acf.hidden = true;
+    var pi = $('#paste-import'); if (pi) pi.hidden = true;
+    renderSharePanel();
+    panel.scrollIntoView({ block: 'nearest' });
+    var first = panel.querySelector('button[data-action], input, button.btn');
+    if (first) first.focus();
+  }
+
   function bindShareEvents() {
+    document.addEventListener('click', function (e) {
+      var t = e.target.closest('[data-action="open-share"]');
+      if (!t) return;
+      var m = $('#backup-menu'); if (m) m.open = false;
+      openSharePanel();
+    });
     $('#share-btn').addEventListener('click', function () {
+      var m = $('#backup-menu'); if (m) m.open = false;
       var panel = $('#share-panel');
       panel.hidden = !panel.hidden;
       if (!panel.hidden) {
@@ -1756,8 +1832,7 @@ datesSorted().forEach(function (d) {
     var homeClear = $('#search-clear'); if (homeClear) homeClear.hidden = true;
     ui.noteForm = null;
     ui.highlightEdit = false;
-    var allRadio = document.querySelector('#filter-group input[value="all"]');
-    if (allRadio) allRadio.checked = true;
+    var fsel = $('#filter-select'); if (fsel) fsel.value = 'all';
     var addForm = $('#add-category-form'); if (addForm) addForm.hidden = true;
     var share = $('#share-panel'); if (share) share.hidden = true;
     var paste = $('#paste-import'); if (paste) paste.hidden = true;
@@ -1794,14 +1869,15 @@ datesSorted().forEach(function (d) {
         form.scrollIntoView({ block: 'nearest' });
       }
     }
-    $('#add-category-btn').addEventListener('click', function () { openAddCategory(true); });
+    var addCatBtn = $('#add-category-btn');
+    if (addCatBtn) addCatBtn.addEventListener('click', function () { openAddCategory(true); });
     $('#category-tabs').addEventListener('click', function (e) {
       if (e.target.closest('[data-action="add-category-tab"]')) openAddCategory(false);
     });
     $('#add-category-cancel').addEventListener('click', function () {
       $('#add-category-form').hidden = true;
       $('#new-category-name').value = '';
-      $('#add-category-btn').focus();
+      var back = $('#add-category-btn') || $('.category-tab--add'); if (back) back.focus();
     });
     $('#add-category-form').addEventListener('submit', function (e) {
       e.preventDefault();
@@ -1809,12 +1885,37 @@ datesSorted().forEach(function (d) {
       if (addCategory(input.value)) {
         input.value = '';
         $('#add-category-form').hidden = true;
-        $('#add-category-btn').focus();
+        var back2 = $('#add-category-btn') || $('.category-tab--add'); if (back2) back2.focus();
       }
     });
 
     $('#export-btn').addEventListener('click', function () { $('#backup-menu').open = false; exportJson(); });
     $('#import-btn').addEventListener('click', function () { $('#backup-menu').open = false; $('#import-file').click(); });
+    var searchToggle = $('#search-toggle');
+    if (searchToggle) {
+      searchToggle.addEventListener('click', function () {
+        ui.searchOpen = !ui.searchOpen;
+        if (!ui.searchOpen) { ui.search = ''; var si0 = $('#item-search'); if (si0) si0.value = ''; var sc0 = $('#search-clear'); if (sc0) sc0.hidden = true; }
+        render();
+        if (ui.searchOpen) { var si1 = $('#item-search'); if (si1) si1.focus(); }
+      });
+    }
+    var homeView = $('#view-home');
+    if (homeView) {
+      homeView.addEventListener('click', function (e) {
+        var b = e.target.closest('[data-action]');
+        if (!b) return;
+        switch (b.dataset.action) {
+          case 'ob-dismiss': ui.onboardingDismissed = true; saveUiPrefs(); renderHome(); break;
+          case 'ob-edit': ui.editMode = true; setView('checklist'); break;
+          case 'ob-share': openSharePanel(); break;
+          case 'ob-check': case 'go-checklist': setView('checklist'); break;
+          case 'go-category': ui.activeCategory = b.dataset.categoryId; setView('checklist'); break;
+        }
+      });
+    }
+    var strip = $('#highlights-strip');
+    if (strip) strip.addEventListener('click', function () { ui.stripOpen = !ui.stripOpen; renderHighlightsStrip(); });
     var searchInput = $('#item-search');
     if (searchInput) {
       searchInput.addEventListener('input', function () { ui.search = searchInput.value; renderCategories(); $('#search-clear').hidden = !ui.search; });
@@ -2147,6 +2248,7 @@ datesSorted().forEach(function (d) {
     var loaded = loadState();
     state = loaded.state;
     loadUiPrefs();
+    if (!uiPrefsFound) ui.view = 'home';
     bindEvents();
     if (loaded.fresh && storageOk) {
       saveState({ initial: true });
