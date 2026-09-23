@@ -368,7 +368,7 @@
 
   /* ---------- state ---------- */
   var state;
-  var ui = { filter: 'all', editMode: false, pendingUndo: null, undoTimer: null, collapsed: {}, noteForm: null, qtyEdit: null, highlightEdit: false, activeCategory: null, highlightsCollapsed: false, itemEdit: null, view: 'checklist', picksEdit: null, picksActive: 'gpt', dateEdit: null, nameEdit: null, search: '', searchOpen: false, stripOpen: false, onboardingDismissed: false, deviceName: '', toastRemote: true, lastSeenActivity: 0, activity: [], supportEdit: null, memoFocus: null };
+  var ui = { filter: 'all', editMode: false, pendingUndo: null, undoTimer: null, collapsed: {}, noteForm: null, qtyEdit: null, highlightEdit: false, activeCategory: null, highlightsCollapsed: false, itemEdit: null, view: 'checklist', picksEdit: null, picksActive: 'gpt', dateEdit: null, nameEdit: null, search: '', searchOpen: false, stripOpen: false, onboardingDismissed: false, deviceName: '', autoName: '', toastRemote: true, lastSeenActivity: 0, activity: [], supportEdit: null, memoFocus: null, seenBase: 0 };
 
   // Active tab (narrow screens): falls back to the first category when the saved one is gone.
   function activeCategoryId() {
@@ -405,6 +405,7 @@
         if (['home','checklist','notes','picks','names','settings','supports','memos'].indexOf(parsed.view) !== -1) ui.view = parsed.view;
         ui.onboardingDismissed = parsed.onboardingDismissed === true;
         if (typeof parsed.deviceName === 'string') ui.deviceName = parsed.deviceName.slice(0, 12);
+        if (typeof parsed.autoName === 'string') ui.autoName = parsed.autoName.slice(0, 12);
         if (parsed.toastRemote === false) ui.toastRemote = false;
         if (typeof parsed.lastSeenActivity === 'number') ui.lastSeenActivity = parsed.lastSeenActivity;
         if (parsed.picksActive === 'gpt' || parsed.picksActive === 'claude') ui.picksActive = parsed.picksActive;
@@ -424,6 +425,7 @@
         view: ui.view,
         onboardingDismissed: ui.onboardingDismissed,
         deviceName: ui.deviceName,
+        autoName: ui.autoName,
         toastRemote: ui.toastRemote,
         lastSeenActivity: ui.lastSeenActivity,
         highlightsCollapsed: ui.highlightsCollapsed
@@ -512,7 +514,7 @@
     ui.dateEdit = null;
     ui.nameEdit = null;
     ui.supportEdit = null;
-    if (view === 'home') markActivitySeen(false);
+    if (view === 'home') { ui.seenBase = ui.lastSeenActivity; markActivitySeen(false); }
     saveUiPrefs();
     render();
     window.scrollTo(0, 0);
@@ -900,7 +902,7 @@
     var html = '';
     if (ui.noteForm === 'new') html += '<li class="note note--editing">' + noteFormHtml(null) + '</li>';
     if (notes.length === 0 && ui.noteForm !== 'new') {
-      html += '<li class="notes-empty">아직 진료 메모가 없습니다. ‘메모 추가’를 눌러 첫 기록을 남겨 보세요.</li>';
+      html += '<li class="notes-empty">아직 진료 메모가 없습니다. ‘일지 쓰기’를 눌러 첫 기록을 남겨 보세요.</li>';
     }
     notes.forEach(function (n) {
       if (ui.noteForm === n.id) {
@@ -1061,7 +1063,7 @@
     var id = isNew ? 'new' : escapeHtml(d.id);
     var h = '<form class="date-form" data-date-form="' + id + '">';
     h += '<div class="field-row"><div class="field"><label for="date-d-' + id + '">날짜</label>';
-    h += '<input type="date" id="date-d-' + id + '" name="date" data-focus-key="date-d:' + id + '" value="' + escapeHtml(isNew ? todayStamp() : d.date) + '"></div>';
+    h += '<input type="date" id="date-d-' + id + '" name="date" data-focus-key="date-d:' + id + '" value="' + escapeHtml(isNew ? '' : d.date) + '"></div>';
     h += '<div class="field"><label for="date-t-' + id + '">시간 (선택)</label>';
     h += '<input type="text" id="date-t-' + id + '" name="time" data-focus-key="date-t:' + id + '" value="' + escapeHtml(isNew ? '' : d.time) + '" maxlength="' + DATE_TIME_MAX + '" placeholder="예: 오전 10시"></div></div>';
     h += '<div class="field"><label for="date-l-' + id + '">라벨 (선택)</label>';
@@ -1124,7 +1126,7 @@ datesSorted().forEach(function (d) {
   function submitDateForm(form) {
     var v = readDateForm(form);
     var err = $('[data-error]', form);
-    if (!v.date && !v.label && !v.time && !v.memo) { err.textContent = '날짜나 라벨 중 하나는 입력하세요.'; err.hidden = false; return; }
+    if (!v.date) { err.textContent = '날짜를 선택하세요.'; err.hidden = false; var di = $('input[name="date"]', form); if (di) di.focus(); return; }
     var key = form.dataset.dateForm;
     if (key === 'new') {
       state.dates.push({ id: uid(), date: v.date, time: v.time, label: v.label, memo: v.memo });
@@ -1401,7 +1403,18 @@ datesSorted().forEach(function (d) {
   }
 
   /* ---------- 변경 기록(알림) ---------- */
-  function myName() { return ui.deviceName || '나'; }
+  // 이름을 정하지 않은 기기는 기기마다 다른 자동 이름을 쓴다(둘 다 '나'면 서로의 변경을 구분할 수 없다).
+  function autoName() {
+    if (!ui.autoName) { ui.autoName = '가족' + Math.random().toString(36).slice(2, 5).toUpperCase(); saveUiPrefs(); }
+    return ui.autoName;
+  }
+  function myName() { return ui.deviceName || autoName(); }
+  function ensureDeviceName() {
+    if (ui.deviceName) return;
+    var n = window.prompt('변경 기록에 표시할 내 이름을 입력하세요 (예: 남편, 아내)', '');
+    if (n && n.trim()) { ui.deviceName = n.trim().slice(0, 12); saveUiPrefs(); renderSettings(); }
+    else showToast('이름을 정하지 않아 ‘' + autoName() + '’으로 표시됩니다. 설정에서 바꿀 수 있습니다.');
+  }
   function act(kind, text) {
     var S = window.ChecklistSync;
     if (!S || !S.getState().roomId) return;
@@ -1437,9 +1450,11 @@ datesSorted().forEach(function (d) {
     var me = myName();
     var items = ui.activity.slice().sort(function (a, b) { return b.t - a.t; }).slice(0, 30);
     if (!items.length) { list.innerHTML = '<li class="activity-empty">아직 변경 기록이 없습니다.</li>'; if (clearBtn) clearBtn.hidden = true; return; }
-    if (clearBtn) clearBtn.hidden = unreadActivityCount() === 0;
+    var base = Math.min(ui.seenBase || 0, ui.lastSeenActivity);
+    var fresh = items.filter(function (a) { return a.t > base && a.who !== me; }).length;
+    if (clearBtn) clearBtn.hidden = fresh === 0;
     list.innerHTML = items.map(function (a) {
-      var unread = a.t > ui.lastSeenActivity && a.who !== me;
+      var unread = a.t > base && a.who !== me;
       return '<li class="activity' + (unread ? ' is-unread' : '') + '"><span class="activity__who">' + escapeHtml(a.who || '누군가') + '</span>' +
         '<span class="activity__text">' + escapeHtml(a.text || '') + '</span><span class="activity__time">' + escapeHtml(relTime(a.t)) + '</span></li>';
     }).join('');
@@ -1458,14 +1473,14 @@ datesSorted().forEach(function (d) {
       }
     }
     activityInitialized = true;
-    if (ui.view === 'home' && !activityInitialized) markActivitySeen(false);
+    if (ui.view === 'home' && document.visibilityState === 'visible') markActivitySeen(false);
     renderActivity();
     renderPrimaryTabs();
   }
 
   /* ---------- 설정 ---------- */
   function renderSettings() {
-    var dn = $('#device-name'); if (dn && document.activeElement !== dn) dn.value = ui.deviceName;
+    var dn = $('#device-name'); if (dn && document.activeElement !== dn) { dn.value = ui.deviceName; dn.placeholder = ui.deviceName ? '예: 남편, 아내' : '예: 남편, 아내 (지금은 ' + autoName() + ')'; }
     var dd = $('#due-date'); if (dd && document.activeElement !== dd) dd.value = state.dueDate || '';
     var tr = $('#toast-remote'); if (tr) tr.checked = ui.toastRemote;
   }
@@ -1933,18 +1948,38 @@ datesSorted().forEach(function (d) {
     return true;
   }
 
+  function isStandalone() {
+    return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+  }
   function exportJson() {
     var payload = backupPayload(true);
-    var blob = new Blob([payload], { type: 'application/json' });
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement('a');
-    a.href = url;
-    a.download = '출산가방-체크리스트-' + todayStamp() + '.json';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
-    showToast('JSON 파일을 내보냈습니다.');
+    var name = '출산가방-체크리스트-' + todayStamp() + '.json';
+    var download = function () {
+      var blob = new Blob([payload], { type: 'application/json' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+      showToast('JSON 파일을 내보냈습니다.');
+    };
+    // 홈 화면 웹앱(특히 아이폰)은 파일 다운로드가 막히는 경우가 있어 공유 시트('파일에 저장')를 먼저 시도한다.
+    if (isStandalone() && navigator.share && navigator.canShare && typeof File === 'function') {
+      try {
+        var file = new File([payload], name, { type: 'application/json' });
+        if (navigator.canShare({ files: [file] })) {
+          navigator.share({ files: [file], title: name }).then(function () { showToast('백업 파일을 내보냈습니다.'); }, function (e) {
+            if (e && e.name === 'AbortError') return; // 사용자가 취소
+            download();
+          });
+          return;
+        }
+      } catch (e) { /* fall back to download */ }
+    }
+    download();
   }
 
   function importJsonFile(file) {
@@ -2040,14 +2075,17 @@ datesSorted().forEach(function (d) {
     } else if (st.roomId) {
       html += '<p class="share__text">이 기기는 아래 링크와 연결되어 있습니다. 같은 링크를 연 기기끼리 체크리스트·진료 메모·꼭 기억하기가 실시간으로 함께 바뀝니다.</p>';
       html += '<div class="share__linkrow"><label class="visually-hidden" for="share-link">공유 링크</label><input type="text" id="share-link" readonly value="' + escapeHtml(st.link) + '"><button type="button" class="btn btn--small" data-action="copy-link">링크 복사</button></div>';
+      html += '<div class="share__linkrow"><label class="visually-hidden" for="share-code">공유 코드</label><input type="text" id="share-code" readonly value="' + escapeHtml(st.roomId) + '"><button type="button" class="btn btn--small" data-action="copy-code">코드 복사</button></div>';
+      html += '<p class="share__text share__text--muted">📱 홈 화면에 추가한 웹앱은 카톡 링크를 눌러도 연결되지 않습니다(아이폰은 링크를 사파리에서 엽니다). 웹앱을 연 뒤 설정 → 가족 공유에 위 코드를 붙여넣고 ‘참여’를 누르세요.</p>';
       html += '<p class="share__status">상태: ' + escapeHtml(syncStatusText(st) || '대기') + (st.detail ? ' · ' + escapeHtml(st.detail) : '') + (st.lastSyncedAt ? ' · 마지막 동기화 ' + escapeHtml(timeStampOf(st.lastSyncedAt)) : '') + '</p>';
       html += '<p class="share__text share__text--muted">링크를 아는 사람은 누구나 볼 수 있으니 가족에게만 보내세요. 카카오톡 등으로 보내고 받은 기기에서 링크를 열면 바로 연결됩니다.</p>';
       html += '<div class="note-form__actions"><button type="button" class="btn btn--small btn--danger" data-action="leave-room">이 기기에서 공유 끊기</button></div>';
     } else {
       html += '<p class="share__text">공유 링크를 만들면 지금 이 기기의 목록이 서버에 올라가고, 그 링크를 연 다른 기기와 실시간으로 함께 바뀝니다. 로그인은 필요 없습니다.</p>';
       html += '<div class="note-form__actions"><button type="button" class="btn btn--primary btn--small" data-action="create-room">공유 링크 만들기</button></div>';
-      html += '<p class="share__text" style="margin-top:10px">이미 받은 링크가 있다면 여기에 붙여넣으세요.</p>';
-      html += '<form class="share__linkrow" data-action="join-room"><label class="visually-hidden" for="join-link">받은 공유 링크</label><input type="text" id="join-link" placeholder="https://…/checklist/?room=…" autocomplete="off"><button type="submit" class="btn btn--small">참여</button></form>';
+      html += '<p class="share__text" style="margin-top:10px">이미 받은 링크나 코드가 있다면 여기에 붙여넣으세요.</p>';
+      html += '<form class="share__linkrow" data-action="join-room"><label class="visually-hidden" for="join-link">받은 공유 링크 또는 코드</label><input type="text" id="join-link" placeholder="공유 링크 또는 코드 붙여넣기" autocomplete="off" autocapitalize="off" autocorrect="off"><button type="submit" class="btn btn--small">참여</button></form>';
+      html += '<p class="share__text share__text--muted">홈 화면 웹앱에서는 카톡 링크를 눌러도 연결되지 않으니, 링크(또는 코드)를 복사해 여기에 붙여넣고 참여하세요.</p>';
       if (st.status === 'error' && st.detail) html += '<p class="field-error">' + escapeHtml(st.detail) + '</p>';
       if (st.status === 'connecting') html += '<p class="share__status">연결 중…</p>';
     }
@@ -2082,23 +2120,22 @@ datesSorted().forEach(function (d) {
       else if (a === 'open-supports') setView('supports');
       else if (a === 'go-home') setView('home');
     });
-    var shareBtn = $('#share-btn');
-    if (shareBtn) shareBtn.addEventListener('click', openSharePanel);
-    var shareClose = $('#share-close');
-    if (shareClose) shareClose.addEventListener('click', function () { setView('home'); });
     $('#share-panel').addEventListener('click', function (e) {
       var btn = e.target.closest('[data-action]');
       if (!btn || btn.tagName !== 'BUTTON') return;
       var S = window.ChecklistSync;
       switch (btn.dataset.action) {
         case 'create-room':
+          ensureDeviceName();
           S.createRoom().then(function () { showToast('공유 링크를 만들었습니다. 링크를 복사해 가족에게 보내세요.'); }, function () { /* status shows the error */ });
           break;
-        case 'copy-link': {
-          var linkEl = $('#share-link');
+        case 'copy-link':
+        case 'copy-code': {
+          var isCode = btn.dataset.action === 'copy-code';
+          var linkEl = $(isCode ? '#share-code' : '#share-link');
           var text = linkEl.value;
-          var done = function () { showToast('공유 링크를 복사했습니다.'); };
-          var fail = function () { linkEl.focus(); linkEl.select(); showToast('자동 복사가 막혀 있습니다. 링크를 직접 선택해 복사하세요.'); };
+          var done = function () { showToast(isCode ? '공유 코드를 복사했습니다. 웹앱의 설정 → 가족 공유에 붙여넣으세요.' : '공유 링크를 복사했습니다.'); };
+          var fail = function () { linkEl.focus(); linkEl.select(); showToast('자동 복사가 막혀 있습니다. 직접 선택해 복사하세요.'); };
           if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, fail); else fail();
           break;
         }
@@ -2116,7 +2153,8 @@ datesSorted().forEach(function (d) {
       e.preventDefault();
       var S = window.ChecklistSync;
       var id = S.extractRoomId($('#join-link').value);
-      if (!id) { showToast('올바른 공유 링크가 아닙니다.'); return; }
+      if (!id) { showToast('올바른 공유 링크나 코드가 아닙니다.'); return; }
+      ensureDeviceName();
       S.joinRoom(id).then(function (joined) {
         if (joined) showToast('공유 링크에 참여했습니다.');
       }, function () { /* status shows the error */ });
@@ -2164,9 +2202,6 @@ datesSorted().forEach(function (d) {
   }
 
   function bindEvents() {
-    var homeBtn = $('#home-btn');
-    if (homeBtn) homeBtn.addEventListener('click', goHome);
-
     $('#filter-group').addEventListener('change', function (e) {
       if (e.target.name === 'filter') { ui.filter = e.target.value; render(); }
     });
@@ -2249,6 +2284,17 @@ datesSorted().forEach(function (d) {
         var id = ta.closest('[data-memo-id]').dataset.memoId;
         clearTimeout(memoTimers[id]); saveMemoText(id, ta.value, true);
       });
+      // 앱 전환·화면 끔·탭 닫기: 0.6초 대기 중인 메모를 바로 저장한다(홈 화면 웹앱에서 blur가 오지 않는 경우 대비)
+      var flushMemoTimers = function () {
+        Object.keys(memoTimers).forEach(function (id) {
+          if (!memoTimers[id]) return;
+          clearTimeout(memoTimers[id]); memoTimers[id] = null;
+          var ta = document.querySelector('.memo-item[data-memo-id="' + id + '"] .memo-item__text');
+          if (ta) saveMemoText(id, ta.value, false);
+        });
+      };
+      document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') flushMemoTimers(); });
+      window.addEventListener('pagehide', flushMemoTimers);
       memosView.addEventListener('click', function (e) {
         var b = e.target.closest('button[data-action]'); if (!b) return;
         if (b.dataset.action === 'new-memo') { newMemo(); return; }
@@ -2263,7 +2309,7 @@ datesSorted().forEach(function (d) {
       setView('memos');
     });
     var actClear = $('#activity-clear');
-    if (actClear) actClear.addEventListener('click', function () { markActivitySeen(true); });
+    if (actClear) actClear.addEventListener('click', function () { markActivitySeen(true); ui.seenBase = ui.lastSeenActivity; renderActivity(); });
 
     // 설정
     var dnInput = $('#device-name');
@@ -2635,6 +2681,7 @@ datesSorted().forEach(function (d) {
     var loaded = loadState();
     state = loaded.state;
     loadUiPrefs();
+    ui.seenBase = ui.lastSeenActivity;
     if (!uiPrefsFound) ui.view = 'home';
     if (ui.view === 'supports' || ui.view === 'memos') ui.view = 'home';
     bindEvents();

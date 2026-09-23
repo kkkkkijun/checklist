@@ -73,12 +73,12 @@ button, input, select, textarea { font: inherit; color: inherit; }
 #save-status.is-error { color: var(--danger); font-weight: 600; }
 
 .dday-pill {
-  flex-shrink: 0; display: inline-flex; align-items: center; min-height: 32px; padding: 0 10px; border-radius: 999px;
+  flex-shrink: 0; display: inline-flex; align-items: center; min-height: 40px; padding: 0 10px; border-radius: 999px;
   border: 1px solid #e6d2f2; background: #f6ecfb; color: #6b3f8f; font-weight: 700; font-size: 0.8rem; cursor: pointer; white-space: nowrap;
 }
 .sync-pill {
   flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px;
-  min-height: 32px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--border);
+  min-height: 40px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--border);
   background: var(--card); font-size: 0.78rem; font-weight: 600; color: var(--muted); cursor: pointer;
   max-width: 40%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
@@ -115,7 +115,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .home-btn:active { transform: scale(0.96); }
 
 .app-title { font-size: 1.35rem; margin: 0; line-height: 1.25; letter-spacing: -0.01em; }
-.app-title__btn { font: inherit; color: inherit; background: none; border: 0; padding: 4px 6px 4px 0; margin-left: -2px; cursor: pointer; border-radius: 8px; }
+.app-title__btn { font: inherit; color: inherit; background: none; border: 0; padding: 4px 6px 4px 0; margin-left: -2px; cursor: pointer; border-radius: 8px; white-space: nowrap; min-height: 40px; }
 .app-title__btn:hover { color: var(--peach-strong); }
 
 .save-status { margin: 0; font-size: 0.8rem; color: var(--muted); }
@@ -136,7 +136,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .share__text--muted { color: var(--muted); font-size: 0.82rem; }
 .share__status { margin: 8px 0 0; font-size: 0.85rem; color: var(--muted); }
 .share__linkrow { display: flex; gap: 6px; margin-top: 8px; align-items: center; }
-.share__linkrow input { min-height: 40px; font-size: 0.85rem; }
+.share__linkrow input { min-height: 40px; font-size: 1rem; }
 .share__linkrow .btn { flex-shrink: 0; }
 
 .progress-card {
@@ -207,13 +207,13 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .bottom-nav .primary-tab {
   flex: 1 1 0; max-width: 110px; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
   min-height: 52px; padding: 4px 0; border: 0; background: none; border-radius: 10px; cursor: pointer;
-  color: var(--muted); font-weight: 600; font-size: 0.66rem; position: relative;
+  color: var(--muted); font-weight: 600; font-size: 0.74rem; position: relative;
 }
 .bottom-nav .primary-tab__count--alert { color: #fff; background: var(--danger); }
 .bottom-nav .primary-tab__icon { font-size: 1.25rem; line-height: 1; }
 .bottom-nav .primary-tab__label { white-space: nowrap; }
 .bottom-nav .primary-tab__count {
-  position: absolute; top: 2px; right: calc(50% - 26px); font-size: 0.62rem; font-weight: 700;
+  position: absolute; top: 1px; right: calc(50% - 28px); font-size: 0.62rem; font-weight: 700;
   color: var(--peach-strong); background: var(--peach-soft); border-radius: 999px; padding: 1px 5px; min-width: 16px; text-align: center;
 }
 .bottom-nav .primary-tab__count:empty { display: none; }
@@ -225,7 +225,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .home-card__title { font-size: 1rem; margin: 0; }
 .home-card__cta { width: 100%; margin-top: 10px; }
 .home-cats { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 4px; }
-.home-cat { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) 40% auto; align-items: center; gap: 8px; min-height: 40px; padding: 4px 6px; border: 0; background: none; border-radius: 8px; cursor: pointer; font: inherit; text-align: left; }
+.home-cat { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) 40% auto; align-items: center; gap: 8px; min-height: 44px; padding: 4px 6px; border: 0; background: none; border-radius: 8px; cursor: pointer; font: inherit; text-align: left; }
 .home-cat:hover { background: var(--peach-soft); }
 .home-cat__name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .home-cat__bar { height: 6px; border-radius: 999px; background: var(--peach-soft); overflow: hidden; }
@@ -234,16 +234,6 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .home-share__text { margin: 6px 0 8px; font-size: 0.9rem; color: var(--muted); }
 #view-home .highlights { margin-top: 10px; }
 
-.onboard { background: #fff6ef; border: 1px solid var(--peach); border-radius: var(--radius); padding: 12px 14px; margin-top: 6px; }
-.onboard__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.onboard__title { font-size: 1rem; margin: 0; }
-.onboard__close { border: 0; background: none; font-size: 1.3rem; line-height: 1; color: var(--muted); cursor: pointer; min-width: 36px; min-height: 36px; border-radius: 8px; }
-.onboard__steps { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
-.onboard__step { width: 100%; display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); cursor: pointer; font: inherit; text-align: left; }
-.onboard__step:hover { border-color: var(--peach-strong); }
-.onboard__step strong { display: block; font-size: 0.95rem; }
-.onboard__step small { display: block; font-size: 0.8rem; color: var(--muted); }
-.onboard__num { width: 26px; height: 26px; border-radius: 50%; background: var(--peach-strong); color: #fff; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 0.85rem; }
 
 /* ---------- 홈: 최근 변경 / 메모 / 링크 ---------- */
 .activity-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 2px; }
@@ -254,7 +244,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .activity__text { min-width: 0; overflow-wrap: anywhere; }
 .activity__time { font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
 .activity-empty { padding: 8px 6px; color: var(--muted); font-size: 0.88rem; }
-.memo-input { width: 100%; min-height: 96px; margin-top: 8px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: #fff; resize: vertical; line-height: 1.55; font-size: 0.95rem; }
+.memo-input { width: 100%; min-height: 96px; margin-top: 8px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: #fff; resize: vertical; line-height: 1.55; font-size: 1rem; }
 .memo-status { margin: 0; font-size: 0.78rem; color: var(--muted); }
 .home-link {
   width: 100%; display: flex; align-items: center; gap: 12px; margin-top: 10px; padding: 12px 14px;
@@ -279,7 +269,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .memo-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 10px; }
 @media (min-width: 720px) { .memo-list { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; } }
 .memo-item { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 10px 12px; }
-.memo-item__text { width: 100%; min-height: 90px; padding: 8px 10px; border: 1px solid transparent; border-radius: 8px; background: #fffdfb; resize: vertical; line-height: 1.55; font-size: 0.95rem; }
+.memo-item__text { width: 100%; min-height: 90px; padding: 8px 10px; border: 1px solid transparent; border-radius: 8px; background: #fffdfb; resize: vertical; line-height: 1.55; font-size: 1rem; }
 .memo-item__text:focus { border-color: var(--peach-strong); outline: none; background: #fff; }
 .memo-item__foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 6px; }
 .memo-item__time { font-size: 0.78rem; color: var(--muted); }
@@ -303,8 +293,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .settings-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .settings-card.share { margin-top: 10px; }
 .settings-card .paste-import { margin-top: 4px; }
-.view-back { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.view-back .notes__title { min-width: 0; }
+.view-back { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1 1 auto; }
+.view-back .notes__title { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.view-back > .btn { flex: 0 0 auto; width: auto !important; min-width: 44px; padding: 0 10px; }
 
 /* ---------- 정부 지원 ---------- */
 #view-supports { margin-top: 6px; }
@@ -328,7 +319,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .support__row b { display: inline-block; min-width: 3em; color: var(--muted); font-weight: 600; font-size: 0.8rem; margin-right: 4px; }
 .support__link { color: var(--peach-strong); font-weight: 600; }
 .support__status { margin-top: 8px; }
-.support__status select { min-height: 38px; font-size: 0.9rem; }
+.support__status select { min-height: 40px; font-size: 1rem; }
 .support-form { display: grid; gap: 8px; }
 .support-form textarea { width: 100%; min-height: 60px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: #fff; resize: vertical; line-height: 1.5; }
 
@@ -384,7 +375,7 @@ body:not(.is-checklist-view) #add-category-btn { display: none; }
 .ctrl-filter select {
   width: 100%; min-height: 40px; padding: 6px 32px 6px 12px; border: 1px solid var(--border); border-radius: 10px;
   background: var(--card) url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%236f675f' stroke-width='1.8'/%3E%3C/svg%3E") no-repeat right 12px center;
-  font-weight: 600; font-size: 0.92rem; appearance: none; -webkit-appearance: none;
+  font-weight: 600; font-size: 1rem; appearance: none; -webkit-appearance: none;
 }
 .ctrl-edit { flex-shrink: 0; min-height: 40px; padding: 0 12px; }
 .search { margin-top: 6px; }
@@ -464,7 +455,7 @@ body:not(.is-checklist-view) #add-category-btn { display: none; }
 .btn--primary:hover { background: #d97f5f; }
 .btn--danger { color: var(--danger); }
 .btn--danger:hover { background: #fdecea; }
-.btn--small { min-height: 38px; padding: 0 12px; font-size: 0.88rem; }
+.btn--small { min-height: 40px; padding: 0 12px; font-size: 0.88rem; }
 .btn--toggle[aria-pressed="true"] { background: var(--peach-strong); border-color: var(--peach-strong); color: #fff; }
 
 /* ---------- Menu ---------- */
@@ -486,7 +477,7 @@ body:not(.is-checklist-view) #add-category-btn { display: none; }
 .toolbar__edit-mobile { display: none; }
 .paste-import { display: grid; gap: 8px; margin-top: 10px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; }
 .paste-import__label { font-size: 0.9rem; font-weight: 600; }
-.paste-import textarea { width: 100%; min-height: 96px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: #fff; font-family: var(--font-mono, monospace); font-size: 0.8rem; resize: vertical; }
+.paste-import textarea { width: 100%; min-height: 96px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: #fff; font-family: var(--font-mono, monospace); font-size: 1rem; resize: vertical; }
 
 /* ---------- Forms ---------- */
 input[type="text"], input[type="number"], select {
@@ -501,7 +492,7 @@ input[type="text"], input[type="number"], select {
 input[type="number"] { -moz-appearance: textfield; }
 
 .inline-form { display: flex; gap: 6px; margin-top: 10px; flex-wrap: nowrap; align-items: center; }
-.inline-form input[type="text"] { flex: 1 1 auto; min-width: 0; min-height: 40px; padding: 6px 12px; font-size: 0.95rem; }
+.inline-form input[type="text"] { flex: 1 1 auto; min-width: 0; min-height: 40px; padding: 6px 12px; font-size: 1rem; }
 .inline-form .btn { min-height: 40px; padding: 0 12px; font-size: 0.9rem; flex-shrink: 0; }
 .add-category-form { max-width: 480px; margin: 8px 0 0; }
 .add-category-form input[type="text"] { min-height: 38px; }
@@ -519,7 +510,7 @@ input[type="number"] { -moz-appearance: textfield; }
 .search input[type="search"]::-webkit-search-cancel-button { display: none; }
 .search input:focus { outline: none; }
 .search:focus-within { border-color: var(--peach-strong); box-shadow: 0 0 0 2px var(--peach-soft); }
-.search__clear { flex-shrink: 0; min-width: 32px; min-height: 32px; border: 0; background: none; color: var(--muted); font-size: 1.2rem; cursor: pointer; border-radius: 50%; }
+.search__clear { flex-shrink: 0; min-width: 40px; min-height: 40px; border: 0; background: none; color: var(--muted); font-size: 1.2rem; cursor: pointer; border-radius: 50%; }
 .search__clear:hover { background: var(--peach-soft); color: var(--peach-strong); }
 .search-results { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 10px 12px; }
 .search-results__count { margin: 2px 2px 6px; font-size: 0.85rem; color: var(--muted); }
@@ -692,7 +683,7 @@ input[type="number"] { -moz-appearance: textfield; }
 .pick__text { white-space: pre-wrap; line-height: 1.6; font-size: 0.95rem; }
 .pick__empty { margin: 0; color: var(--muted); font-size: 0.88rem; }
 .pick-form { display: grid; gap: 8px; }
-.pick-form textarea { width: 100%; min-height: 200px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: #fff; resize: vertical; line-height: 1.55; font-size: 0.9rem; }
+.pick-form textarea { width: 100%; min-height: 200px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: #fff; resize: vertical; line-height: 1.55; font-size: 1rem; }
 
 /* ---------- 택일 후보 + 작명 노트 ---------- */
 .datecands__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
@@ -821,6 +812,15 @@ input[type="date"]::-webkit-date-and-time-value { text-align: left; }
 @media (max-width: 340px) {
   .filter-option span { font-size: 0.85rem; }
   .toolbar__actions .btn { font-size: 0.85rem; }
+  .app-title { font-size: 1.15rem; }
+  .app-header__row { gap: 5px; }
+  .dday-pill { font-size: 0.72rem; padding: 0 7px; }
+  .sync-pill { font-size: 0.7rem; padding: 0 7px; max-width: 34%; }
+}
+
+/* 아이폰: 16px 미만 입력칸은 포커스 시 화면이 확대되므로 모바일에서는 모든 입력칸을 16px 이상으로 고정 */
+@media (max-width: 767px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]), select, textarea { font-size: 16px !important; }
 }
 
 @media (prefers-reduced-motion: reduce) {

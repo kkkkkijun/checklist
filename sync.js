@@ -25,7 +25,8 @@
     adapter: null,
     unsubscribe: null,
     listeners: [],
-    lastSyncedAt: null
+    lastSyncedAt: null,
+    errorCode: ''
   };
 
   /* ---------- helpers ---------- */
@@ -46,11 +47,46 @@
     sync.listeners.forEach(function (cb) { try { cb(publicState()); } catch (e) { /* ignore */ } });
   }
 
-  function setStatus(status, detail) {
+  function setStatus(status, detail, code) {
     sync.status = status;
     sync.detail = detail || '';
+    sync.errorCode = status === 'error' ? (code || '') : '';
     emit();
   }
+
+  // 사용자에게 보여줄 오류 문구(영문 원문 대신)
+  function errText(err, prefix) {
+    if (err && err.code === 'PERMISSION_DENIED') return '접근이 거부되었습니다. Firebase 보안 규칙을 확인하세요.';
+    if (err && err.code === 'SDK_LOAD') return err.message;
+    var m = err && err.message ? err.message : String(err);
+    if (/fetch|network|import|load|offline|timeout/i.test(m)) return '네트워크 문제로 가족 공유 서버에 연결하지 못했습니다. 기록은 이 기기에 저장되며, 인터넷이 연결되면 다시 시도합니다.';
+    return prefix + m;
+  }
+  function errCode(err) { return err && err.code ? String(err.code) : ''; }
+
+  /* ---------- 서버에 아직 못 올린 변경(오프라인 대기) ---------- */
+  var PENDING_KEY = 'birth-bag-checklist:pending';
+  function readPending() {
+    try { var p = JSON.parse(window.localStorage.getItem(PENDING_KEY) || 'null'); return p && p.roomId && p.updates ? p : null; } catch (e) { return null; }
+  }
+  function writePending(p) {
+    try { if (p && Object.keys(p.updates).length) window.localStorage.setItem(PENDING_KEY, JSON.stringify(p)); else window.localStorage.removeItem(PENDING_KEY); } catch (e) { /* ignore */ }
+  }
+  var pending = readPending();
+  function addPending(roomId, updates) {
+    if (!pending || pending.roomId !== roomId) pending = { roomId: roomId, updates: {} };
+    Object.keys(updates).forEach(function (k) { pending.updates[k] = updates[k]; });
+    writePending(pending);
+  }
+  function clearPending(roomId, updates) {
+    if (!pending || pending.roomId !== roomId) return;
+    Object.keys(updates).forEach(function (k) {
+      if (JSON.stringify(pending.updates[k]) === JSON.stringify(updates[k])) delete pending.updates[k];
+    });
+    if (!Object.keys(pending.updates).length) pending = null;
+    writePending(pending);
+  }
+  function pendingFor(roomId) { return pending && pending.roomId === roomId && Object.keys(pending.updates).length ? pending.updates : null; }
 
   function publicState() {
     return { configured: configured, roomId: sync.roomId, status: sync.status, detail: sync.detail, link: link(), lastSyncedAt: sync.lastSyncedAt, mock: useMock };
@@ -233,6 +269,10 @@
       var fbApp = appMod.initializeApp(config);
       var db = dbMod.getDatabase(fbApp);
       return { db: db, m: dbMod };
+    }, function (err) {
+      var e = new Error('네트워크 문제로 가족 공유 서버에 연결하지 못했습니다. 기록은 이 기기에 저장되며, 인터넷이 연결되면 자동으로 다시 시도합니다.');
+      e.code = 'SDK_LOAD'; e.cause = err;
+      throw e;
     });
     function roomRef(fb, roomId) { return fb.m.ref(fb.db, 'rooms/' + roomId); }
     return {
@@ -303,7 +343,7 @@
       if (sync.status !== 'offline') setStatus('online');
       else emit();
     }, function (err) {
-      setStatus('error', (err && err.code === 'PERMISSION_DENIED') ? '접근이 거부되었습니다. Firebase 보안 규칙을 확인하세요.' : ('연결 오류: ' + (err && err.message ? err.message : String(err))));
+      setStatus('error', errText(err, '연결 오류: '), errCode(err));
     });
     if (app.setActivity && sync.adapter.subscribeActivity) {
       offActivity = sync.adapter.subscribeActivity(roomId, function (list) { app.setActivity(list); });
@@ -337,7 +377,7 @@
       attach(id);
       return id;
     }, function (err) {
-      setStatus('error', '공유 링크를 만들지 못했습니다: ' + (err && err.message ? err.message : String(err)));
+      setStatus('error', errText(err, '공유 링크를 만들지 못했습니다: '), errCode(err));
       throw err;
     });
   }
@@ -349,8 +389,16 @@
     if (!roomId) return Promise.reject(new Error('invalid'));
     if (!configured) return Promise.reject(new Error('unconfigured'));
     setStatus('connecting');
-    return sync.adapter.get(roomId).then(function (doc) {
+    // 지난번에 서버에 못 올린 변경(오프라인 중 종료 등)이 있으면 먼저 올린 뒤 받는다 → 서버 내용이 로컬 변경을 덮어쓰지 않는다.
+    var queued = pendingFor(roomId);
+    var pre = queued ? sync.adapter.update(roomId, queued).then(function () { clearPending(roomId, queued); }) : Promise.resolve();
+    return pre.then(function () { return sync.adapter.get(roomId); }).then(function (doc) {
       if (isEmptyDoc(doc)) {
+        if (opts.silent && !app.isPristine()) {
+          // 이 기기가 쓰던 방인데 서버에 내용이 없다 = 방이 지워졌을 가능성. 조용히 재생성하지 않고 묻는다.
+          var go = window.confirm('공유 방에 저장된 목록이 없습니다. 방이 지워졌거나 비워졌을 수 있어요.\n이 기기의 현재 목록으로 이 방을 다시 시작할까요?\n(취소하면 공유를 끊고 이 기기 기록만 유지합니다.)');
+          if (!go) { storeRoom(null); setUrlRoom(null); setStatus('off'); return null; }
+        }
         return pushFull(roomId).then(function () { attach(roomId); return roomId; });
       }
       var remoteState = stateFromDoc(doc);
@@ -365,7 +413,7 @@
       attach(roomId);
       return roomId;
     }, function (err) {
-      setStatus('error', (err && err.code === 'PERMISSION_DENIED') ? '접근이 거부되었습니다. Firebase 보안 규칙을 확인하세요.' : ('연결 오류: ' + (err && err.message ? err.message : String(err))));
+      setStatus('error', errText(err, '연결 오류: '), errCode(err));
       throw err;
     });
   }
@@ -394,11 +442,14 @@
     var updates = diff(sync.lastDoc, next);
     if (!Object.keys(updates).length) return;
     sync.lastDoc = next;
-    sync.adapter.update(sync.roomId, updates).then(function () {
+    var room = sync.roomId;
+    addPending(room, updates);
+    sync.adapter.update(room, updates).then(function () {
+      clearPending(room, updates);
       sync.lastSyncedAt = new Date();
       emit();
     }, function (err) {
-      setStatus('error', '저장을 서버에 올리지 못했습니다: ' + (err && err.message ? err.message : String(err)));
+      setStatus('error', errText(err, '저장을 서버에 올리지 못했습니다: '), errCode(err));
     });
   });
 
@@ -426,10 +477,25 @@
     var roomId = fromUrl || stored;
     if (roomId) {
       // A room this device already joined reconnects silently; a new link asks before replacing local data.
-      joinRoom(roomId, { silent: roomId === stored }).catch(function () { /* status already set */ });
+      // 앱 상태(app.js init)가 준비된 뒤에 참여한다(즉시 응답하는 어댑터에서도 안전).
+      var startJoin = function () { joinRoom(roomId, { silent: roomId === stored }).catch(function (err) {
+        // 상태가 아직 '연결 중'이면 처리 도중 예외가 난 것 → 사용자에게 오류로 보여준다
+        if (sync.status === 'connecting') setStatus('error', errText(err, '연결 오류: '), errCode(err));
+        window.__syncInitError = err;
+      }); };
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', startJoin); else startJoin();
     }
   } else if (params.get('room')) {
     setStatus('unconfigured', '공유 링크가 있지만 이 사이트에 Firebase 설정이 없습니다.');
   }
+  // 오프라인으로 시작해 Firebase 스크립트를 못 받은 경우: 인터넷이 돌아오면 자동으로 다시 연결
+  window.addEventListener('online', function () {
+    if (!configured || useMock) return;
+    if (sync.status === 'error' && sync.errorCode === 'SDK_LOAD') {
+      sync.adapter = firebaseAdapter();
+      var r = sync.roomId || readStoredRoom();
+      if (r) joinRoom(r, { silent: true }).catch(function () { /* status already set */ });
+    }
+  });
   emit();
 })();
