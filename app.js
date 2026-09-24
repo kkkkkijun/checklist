@@ -101,15 +101,15 @@
   }
 
   /* ---------- data model ---------- */
+  // 기본 상태는 분류 3개만 만들고 준비물은 비워 둔다(직접 하나씩 추가). DEFAULT_TEMPLATE의 이름 목록은
+  // 예전 버전이 채워 둔 '손대지 않은 예시 준비물'을 알아보고 한 번 비우는 데만 쓴다.
+  var TEMPLATE_NAMES = {};
+  DEFAULT_TEMPLATE.forEach(function (cat) { cat.items.forEach(function (n) { TEMPLATE_NAMES[n] = true; }); });
   function createDefaultState() {
     var categories = [];
     var items = [];
     DEFAULT_TEMPLATE.forEach(function (cat) {
-      var cid = uid();
-      categories.push({ id: cid, name: cat.name, icon: cat.icon });
-      cat.items.forEach(function (name) {
-        items.push({ id: uid(), categoryId: cid, name: name, qty: null, unit: '', memo: '', done: false, excluded: false });
-      });
+      categories.push({ id: uid(), name: cat.name, icon: cat.icon });
     });
     return { version: DATA_VERSION, categories: categories, items: items, notes: [], highlights: '', picks: emptyPicks(), dates: [], names: [], dueDate: '', memo: '', memos: [], supports: [] };
   }
@@ -368,7 +368,7 @@
 
   /* ---------- state ---------- */
   var state;
-  var ui = { filter: 'all', editMode: false, pendingUndo: null, undoTimer: null, collapsed: {}, noteForm: null, qtyEdit: null, highlightEdit: false, activeCategory: null, highlightsCollapsed: false, itemEdit: null, view: 'checklist', picksEdit: null, picksActive: 'gpt', dateEdit: null, nameEdit: null, search: '', searchOpen: false, stripOpen: false, onboardingDismissed: false, deviceName: '', autoName: '', toastRemote: true, lastSeenActivity: 0, activity: [], supportEdit: null, memoFocus: null, seenBase: 0 };
+  var ui = { filter: 'all', editMode: false, pendingUndo: null, undoTimer: null, collapsed: {}, noteForm: null, qtyEdit: null, highlightEdit: false, activeCategory: null, highlightsCollapsed: false, itemEdit: null, view: 'checklist', picksEdit: null, picksActive: 'gpt', dateEdit: null, nameEdit: null, search: '', searchOpen: false, stripOpen: false, onboardingDismissed: false, deviceName: '', autoName: '', toastRemote: true, lastSeenActivity: 0, activity: [], supportEdit: null, memoFocus: null, seenBase: 0, templateCleared: false, bulkOpen: null };
 
   // Active tab (narrow screens): falls back to the first category when the saved one is gone.
   function activeCategoryId() {
@@ -406,6 +406,7 @@
         ui.onboardingDismissed = parsed.onboardingDismissed === true;
         if (typeof parsed.deviceName === 'string') ui.deviceName = parsed.deviceName.slice(0, 12);
         if (typeof parsed.autoName === 'string') ui.autoName = parsed.autoName.slice(0, 12);
+        ui.templateCleared = parsed.templateCleared === true;
         if (parsed.toastRemote === false) ui.toastRemote = false;
         if (typeof parsed.lastSeenActivity === 'number') ui.lastSeenActivity = parsed.lastSeenActivity;
         if (parsed.picksActive === 'gpt' || parsed.picksActive === 'claude') ui.picksActive = parsed.picksActive;
@@ -426,6 +427,7 @@
         onboardingDismissed: ui.onboardingDismissed,
         deviceName: ui.deviceName,
         autoName: ui.autoName,
+        templateCleared: ui.templateCleared,
         toastRemote: ui.toastRemote,
         lastSeenActivity: ui.lastSeenActivity,
         highlightsCollapsed: ui.highlightsCollapsed
@@ -487,7 +489,7 @@
   }
 
   function emptyMessage(catItems) {
-    if (catItems.length === 0) return '준비물이 없습니다. 아래에서 추가해 보세요.';
+    if (catItems.length === 0) return '아직 준비물이 없습니다. 위 칸에 이름을 적고 추가를 누르세요. 한 번에 여러 개를 넣으려면 ‘여러 개’를 누르세요.';
     switch (ui.filter) {
       case 'todo': return '미완료 항목이 없습니다. 이 분류는 준비를 마쳤어요.';
       case 'done': return '아직 완료한 항목이 없습니다.';
@@ -732,6 +734,19 @@
     html += '<div class="progress-bar" role="progressbar" aria-label="' + escapeHtml(cat.name) + ' 진행률" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + p.percent + '" aria-valuetext="' + escapeHtml(progressText(p)) + '"><div class="progress-bar__fill" style="width:' + p.percent + '%"></div></div></div>';
 
     html += '<div class="category__body" id="' + bodyId + '"' + (collapsed ? ' hidden' : '') + '>';
+    var bulkOpen = ui.bulkOpen === cat.id;
+    html += '<form class="inline-form quick-add" data-action="add-item">';
+    html += '<label class="visually-hidden" for="new-item-' + escapeHtml(cat.id) + '">' + escapeHtml(cat.name) + '에 추가할 준비물</label>';
+    html += '<input type="text" id="new-item-' + escapeHtml(cat.id) + '" data-focus-key="new-item:' + escapeHtml(cat.id) + '" placeholder="준비물 이름 (예: 수유 패드 2팩)" maxlength="80" autocomplete="off" enterkeyhint="done">';
+    html += '<button type="submit" class="btn btn--primary">추가</button>';
+    html += '<button type="button" class="btn quick-add__bulk' + (bulkOpen ? ' is-active' : '') + '" data-action="bulk-toggle" data-focus-key="bulk-toggle:' + escapeHtml(cat.id) + '" aria-expanded="' + (bulkOpen ? 'true' : 'false') + '" aria-controls="bulk-' + escapeHtml(cat.id) + '">여러 개</button>';
+    html += '</form>';
+    html += '<form class="bulk-add" id="bulk-' + escapeHtml(cat.id) + '" data-action="bulk-add"' + (bulkOpen ? '' : ' hidden') + '>';
+    html += '<label class="visually-hidden" for="bulk-text-' + escapeHtml(cat.id) + '">한 줄에 하나씩 준비물 입력</label>';
+    html += '<textarea id="bulk-text-' + escapeHtml(cat.id) + '" data-focus-key="bulk-text:' + escapeHtml(cat.id) + '" rows="6" placeholder="한 줄에 하나씩 적으세요&#10;수유 패드 2팩&#10;산모 수첩&#10;물티슈 3개"></textarea>';
+    html += '<div class="bulk-add__actions"><span class="bulk-add__hint">이름 뒤에 수량·단위를 적으면 함께 저장됩니다. 메모장·카톡에서 복사한 목록을 그대로 붙여넣어도 됩니다.</span>';
+    html += '<button type="submit" class="btn btn--primary btn--small">모두 추가</button></div>';
+    html += '</form>';
     if (visible.length === 0) {
       html += '<p class="items-empty">' + escapeHtml(emptyMessage(catItems)) + '</p>';
     } else {
@@ -739,11 +754,6 @@
       html += '<ul class="items">' + visible.map(ui.editMode ? renderItemEdit : renderItemView).join('') + '</ul>';
     }
 
-    html += '<form class="inline-form add-item-form" data-action="add-item">';
-    html += '<label class="visually-hidden" for="new-item-' + escapeHtml(cat.id) + '">' + escapeHtml(cat.name) + '에 추가할 준비물 이름</label>';
-    html += '<input type="text" id="new-item-' + escapeHtml(cat.id) + '" data-focus-key="new-item:' + escapeHtml(cat.id) + '" placeholder="준비물 이름" maxlength="60" autocomplete="off">';
-    html += '<button type="submit" class="btn">추가</button>';
-    html += '</form>';
     html += '</div>';
     html += '</section>';
     return html;
@@ -1730,14 +1740,72 @@ datesSorted().forEach(function (d) {
     });
   }
 
-  function addItem(categoryId, name) {
-    var n = String(name || '').trim();
-    if (!n) { showToast('준비물 이름을 입력하세요.'); return false; }
+  // "수유 패드 2팩", "물티슈 x3", "젖병 3" → { name, qty, unit }
+  function parseItemLine(line) {
+    var t = String(line || '').replace(/^[\s\-•·*\d]*[.)]?\s*(?=\S)/, '').trim();
+    t = t.replace(/^[-•·*]\s*/, '').trim();
+    if (!t) return null;
+    var m = t.match(/^(.+?)[\s,]+(?:[xX×]\s*)?(\d{1,4})\s*([가-힣A-Za-z]{0,4})$/);
+    if (m && m[1].trim()) return { name: m[1].trim().slice(0, 60), qty: parseInt(m[2], 10) || null, unit: m[3].slice(0, 10) };
+    return { name: t.slice(0, 60), qty: null, unit: '' };
+  }
+  function addItem(categoryId, text) {
+    var p = parseItemLine(text);
+    if (!p) { showToast('준비물 이름을 입력하세요.'); return false; }
     if (!findCategory(categoryId)) return false;
-    state.items.push({ id: uid(), categoryId: categoryId, name: n.slice(0, 60), qty: null, unit: '', memo: '', done: false, excluded: false });
+    state.items.push({ id: uid(), categoryId: categoryId, name: p.name, qty: p.qty, unit: p.qty ? p.unit : '', memo: '', done: false, excluded: false });
     commit();
-    act('add', '‘' + n.slice(0, 60) + '’ 추가');
+    act('add', '‘' + p.name + '’ 추가');
+    showToast('‘' + p.name + '’ 추가' + (p.qty ? ' · ' + p.qty + p.unit : ''));
     return true;
+  }
+  function addItems(categoryId, text) {
+    if (!findCategory(categoryId)) return 0;
+    var added = [];
+    String(text || '').split(/\r?\n/).forEach(function (line) {
+      var p = parseItemLine(line); if (!p) return;
+      state.items.push({ id: uid(), categoryId: categoryId, name: p.name, qty: p.qty, unit: p.qty ? p.unit : '', memo: '', done: false, excluded: false });
+      added.push(p.name);
+    });
+    if (!added.length) { showToast('추가할 준비물이 없습니다. 한 줄에 하나씩 적어 주세요.'); return 0; }
+    commit();
+    act('add', '준비물 ' + added.length + '개 추가 (' + added.slice(0, 3).join(', ') + (added.length > 3 ? ' 외' : '') + ')');
+    return added.length;
+  }
+  // 준비물 전체 비우기(분류·일지·택일·이름은 유지). 되돌리기 가능.
+  function clearAllItems(auto) {
+    var removed = state.items.slice();
+    if (!removed.length) { if (!auto) showToast('비울 준비물이 없습니다.'); return false; }
+    if (!auto) {
+      var shared = !!(window.ChecklistSync && window.ChecklistSync.getState().roomId);
+      var msg = '준비물 ' + removed.length + '개를 모두 삭제합니다. 분류·일지·택일·이름·메모는 그대로 둡니다.';
+      if (shared) msg += '\n가족 공유 중이라 연결된 다른 기기에서도 함께 삭제됩니다.';
+      msg += '\n계속하기 전에 JSON 백업 파일이 자동으로 저장됩니다. 삭제할까요?';
+      if (!window.confirm(msg)) return false;
+      try { exportJson(); } catch (e) { /* backup best-effort */ }
+    }
+    state.items = [];
+    ui.itemEdit = null; ui.qtyEdit = null;
+    commit();
+    act('delete', (auto ? '기본 예시 준비물 ' : '준비물 ') + removed.length + '개 비움');
+    showToast((auto ? '기본 예시 준비물 ' : '준비물 ') + removed.length + '개를 비웠습니다. 이제 직접 추가하세요.', function () {
+      state.items = removed.concat(state.items); commit(); showToast('준비물을 되돌렸습니다.');
+    });
+    return true;
+  }
+  // 예전 버전이 채워 둔 예시 준비물을 한 번도 손대지 않았으면(체크·수량·메모·제외 없음) 자동으로 비운다.
+  function isPristineTemplate(items) {
+    if (items.length < 20) return false;
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
+      if (!TEMPLATE_NAMES[it.name] || it.done || it.excluded || it.qty !== null || it.memo) return false;
+    }
+    return true;
+  }
+  function clearTemplateItemsOnce() {
+    if (ui.templateCleared) return;
+    ui.templateCleared = true; saveUiPrefs();
+    if (isPristineTemplate(state.items)) clearAllItems(true);
   }
 
   function deleteItem(id) {
@@ -2025,6 +2093,8 @@ datesSorted().forEach(function (d) {
     } finally {
       applyingRemote = false;
     }
+    // 방 참여 직후에는 구독(attach)이 applyRemote 뒤에 붙으므로, 비우기(=변경 전파)는 한 틱 뒤에 실행한다.
+    setTimeout(clearTemplateItemsOnce, 0);
     return true;
   }
 
@@ -2355,6 +2425,8 @@ datesSorted().forEach(function (d) {
       var clearBtn = $('#search-clear');
       if (clearBtn) clearBtn.addEventListener('click', function () { ui.search = ''; searchInput.value = ''; clearBtn.hidden = true; searchInput.focus(); renderCategories(); });
     }
+    var clearItemsBtn = $('#clear-items-btn');
+    if (clearItemsBtn) clearItemsBtn.addEventListener('click', function () { clearAllItems(false); });
     var resetBtn = $('#reset-btn');
     if (resetBtn) resetBtn.addEventListener('click', function () { closeMenu(); resetToDefault(); });
     $('#copy-text-btn').addEventListener('click', function () { closeMenu(); copyBackupText(); });
@@ -2592,6 +2664,14 @@ datesSorted().forEach(function (d) {
       var row = btn.closest('[data-item-id]');
       switch (btn.dataset.action) {
         case 'delete-category': deleteCategory(card.dataset.categoryId); break;
+        case 'bulk-toggle': {
+          var bcid = card.dataset.categoryId;
+          ui.bulkOpen = ui.bulkOpen === bcid ? null : bcid;
+          render();
+          var bt = document.querySelector('[data-focus-key="' + (ui.bulkOpen ? 'bulk-text:' : 'bulk-toggle:') + bcid + '"]');
+          if (bt) bt.focus();
+          break;
+        }
         case 'cat-up': moveCategoryDir(card.dataset.categoryId, -1); break;
         case 'cat-down': moveCategoryDir(card.dataset.categoryId, 1); break;
         case 'toggle-collapse': toggleCollapsed(card.dataset.categoryId); break;
@@ -2636,6 +2716,19 @@ datesSorted().forEach(function (d) {
     });
 
     root.addEventListener('submit', function (e) {
+      var bulk = e.target.closest('form[data-action="bulk-add"]');
+      if (bulk) {
+        e.preventDefault();
+        var bcard = bulk.closest('[data-category-id]');
+        var n = addItems(bcard.dataset.categoryId, $('textarea', bulk).value);
+        if (n) {
+          ui.bulkOpen = null; render();
+          showToast('준비물 ' + n + '개를 추가했습니다.');
+          var qi = document.querySelector('[data-focus-key="new-item:' + bcard.dataset.categoryId + '"]');
+          if (qi) qi.focus();
+        }
+        return;
+      }
       var form = e.target.closest('form[data-action="add-item"]');
       if (!form) return;
       e.preventDefault();
@@ -2644,6 +2737,13 @@ datesSorted().forEach(function (d) {
       if (addItem(card.dataset.categoryId, input.value)) {
         var again = document.querySelector('[data-focus-key="new-item:' + card.dataset.categoryId + '"]');
         if (again) { again.value = ''; again.focus(); }
+      }
+    });
+    // 여러 개 입력칸: Ctrl/⌘+Enter 로 바로 추가
+    root.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && e.target.closest('form[data-action="bulk-add"]')) {
+        e.preventDefault();
+        e.target.closest('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
       }
     });
 
@@ -2692,6 +2792,9 @@ datesSorted().forEach(function (d) {
       $('#save-status').textContent = '저장된 기록을 불러왔습니다';
     }
     render();
+    var storedRoom = null;
+    try { storedRoom = window.localStorage.getItem('birth-bag-checklist:room'); } catch (e) { /* ignore */ }
+    if (!storedRoom && !/[?&]room=/.test(window.location.search)) clearTemplateItemsOnce();
     // sync.js is loaded after app.js; bind once it has had a chance to run.
     window.addEventListener('load', bindShareEvents);
   }

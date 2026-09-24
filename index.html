@@ -15,7 +15,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="마미백">
   <meta name="mobile-web-app-capable" content="yes">
-  <link rel="stylesheet" href="./style.css?v=20260924a">
+  <link rel="stylesheet" href="./style.css?v=20260924b">
 </head>
 <body>
   <a class="skip-link" href="#main-area">본문으로 건너뛰기</a>
@@ -254,6 +254,7 @@
       <h3 id="set-more-title" class="settings-card__title">기타</h3>
       <div class="settings-actions">
         <button type="button" class="btn btn--small" data-action="open-supports">🏛️ 정부 출산 지원 체크리스트</button>
+        <button type="button" class="btn btn--small btn--danger" id="clear-items-btn">준비물 전체 비우기</button>
         <button type="button" class="btn btn--small btn--danger" id="reset-btn">기본 목록으로 초기화</button>
       </div>
       <p class="settings-card__text">기록은 이 기기의 브라우저에 저장됩니다. 가족 공유를 연결하면 같은 코드를 쓰는 기기끼리 함께 바뀝니다.</p>
@@ -300,9 +301,9 @@
     <button type="button" class="toast__close" id="toast-close" aria-label="알림 닫기">×</button>
   </div>
 
-  <script src="./firebase-config.js?v=20260924a"></script>
-  <script src="./app.js?v=20260924a"></script>
-  <script src="./sync.js?v=20260924a"></script>
+  <script src="./firebase-config.js?v=20260924b"></script>
+  <script src="./app.js?v=20260924b"></script>
+  <script src="./sync.js?v=20260924b"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function () {

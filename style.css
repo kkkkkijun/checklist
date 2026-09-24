@@ -494,6 +494,16 @@ input[type="number"] { -moz-appearance: textfield; }
 .inline-form { display: flex; gap: 6px; margin-top: 10px; flex-wrap: nowrap; align-items: center; }
 .inline-form input[type="text"] { flex: 1 1 auto; min-width: 0; min-height: 40px; padding: 6px 12px; font-size: 1rem; }
 .inline-form .btn { min-height: 40px; padding: 0 12px; font-size: 0.9rem; flex-shrink: 0; }
+/* 빠른 추가(목록 위, 항상 표시) + 여러 개 한 번에 */
+.quick-add { margin: 6px 0 8px; }
+.quick-add input[type="text"] { min-height: 44px; }
+.quick-add .btn { min-height: 44px; }
+.quick-add__bulk.is-active { background: var(--peach-soft); border-color: var(--peach-strong); color: var(--peach-strong); }
+.bulk-add { display: grid; gap: 6px; margin: 0 0 10px; padding: 10px; border: 1px dashed var(--peach); border-radius: 10px; background: #fff8f3; }
+.bulk-add textarea { width: 100%; min-height: 132px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: #fff; line-height: 1.5; font-size: 1rem; resize: vertical; }
+.bulk-add__actions { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.bulk-add__hint { font-size: 0.78rem; color: var(--muted); flex: 1 1 200px; line-height: 1.4; }
+.bulk-add__actions .btn { flex-shrink: 0; }
 .add-category-form { max-width: 480px; margin: 8px 0 0; }
 .add-category-form input[type="text"] { min-height: 38px; }
 .add-category-form .btn { min-height: 38px; padding: 0 11px; font-size: 0.88rem; }
