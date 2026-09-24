@@ -391,7 +391,7 @@
 
   /* ---------- state ---------- */
   var state;
-  var ui = { filter: 'all', editMode: false, pendingUndo: null, undoTimer: null, collapsed: {}, noteForm: null, qtyEdit: null, highlightEdit: false, activeCategory: null, highlightsCollapsed: false, itemEdit: null, view: 'checklist', picksEdit: null, picksActive: 'gpt', dateEdit: null, nameEdit: null, search: '', searchOpen: false, stripOpen: false, onboardingDismissed: false, deviceName: '', autoName: '', toastRemote: true, lastSeenActivity: 0, activity: [], supportEdit: null, memoFocus: null, seenBase: 0, templateCleared: false, bulkOpen: null };
+  var ui = { filter: 'all', editMode: false, pendingUndo: null, undoTimer: null, collapsed: {}, noteForm: null, qtyEdit: null, highlightEdit: false, activeCategory: null, highlightsCollapsed: false, itemEdit: null, view: 'checklist', picksEdit: null, picksActive: 'gpt', dateEdit: null, nameEdit: null, search: '', searchOpen: false, stripOpen: false, onboardingDismissed: false, deviceName: '', autoName: '', toastRemote: true, lastSeenActivity: 0, activity: [], supportEdit: null, memoFocus: null, seenBase: 0, templateCleared: false, bulkOpen: null, sort: {} };
 
   // Active tab (narrow screens): falls back to the first category when the saved one is gone.
   function activeCategoryId() {
@@ -423,6 +423,7 @@
       var parsed = JSON.parse(raw);
       if (parsed && typeof parsed === 'object') {
         if (parsed.collapsed && typeof parsed.collapsed === 'object') ui.collapsed = parsed.collapsed;
+        if (parsed.sort && typeof parsed.sort === 'object') ui.sort = parsed.sort;
         if (typeof parsed.activeCategory === 'string') ui.activeCategory = parsed.activeCategory;
         ui.highlightsCollapsed = parsed.highlightsCollapsed === true;
         if (['home','checklist','notes','picks','names','settings','supports','memos'].indexOf(parsed.view) !== -1) ui.view = parsed.view;
@@ -444,6 +445,7 @@
       ui.collapsed = keep;
       window.localStorage.setItem(UI_KEY, JSON.stringify({
         collapsed: ui.collapsed,
+        sort: ui.sort,
         activeCategory: ui.activeCategory,
         picksActive: ui.picksActive,
         view: ui.view,
@@ -480,29 +482,56 @@
   }
 
   function computeProgress(items) {
-    var total = 0, done = 0, excluded = 0, sum = 0;
+    var total = 0, done = 0, excluded = 0, sum = 0, priced = 0;
     items.forEach(function (it) {
       if (it.excluded) { excluded++; return; }
       total++;
       if (it.done) done++;
-      if (typeof it.price === 'number') sum += it.price;
+      if (typeof it.price === 'number') { sum += it.price; priced++; }
     });
     var percent = 0;
     var result_sum = sum;
     if (total > 0) {
       percent = done === total ? 100 : Math.min(99, Math.floor((done / total) * 100));
     }
-    return { total: total, done: done, excluded: excluded, percent: percent, sum: result_sum };
+    return { total: total, done: done, excluded: excluded, percent: percent, sum: result_sum, priced: priced };
   }
 
-  function progressText(p) {
+  // 화면용: '합계 12,000원' 부분만 굵게
+  function progressHtml(p) {
+    var base = escapeHtml(progressText(p, true));
+    if (p.total > 0 && p.sum > 0) base += ' · <b class="sum">합계 ' + escapeHtml(formatWon(p.sum)) + '</b>';
+    return base;
+  }
+  function progressText(p, noSum) {
     if (p.total === 0) {
       return p.excluded > 0 ? '준비 항목 없음 · 제외 ' + p.excluded + '개' : '준비 항목 없음';
     }
     var t = p.done + '/' + p.total + '개 완료 · ' + p.percent + '%';
     if (p.excluded > 0) t += ' · 제외 ' + p.excluded + '개';
-    if (p.sum > 0) t += ' · 합계 ' + formatWon(p.sum);
+    if (p.sum > 0 && !noSum) t += ' · 합계 ' + formatWon(p.sum);
     return t;
+  }
+
+  var SORT_MODES = ['default', 'price-desc', 'price-asc'];
+  function sortModeOf(catId) { var m = ui.sort[catId]; return SORT_MODES.indexOf(m) === -1 ? 'default' : m; }
+  function setSortMode(catId, mode) {
+    if (SORT_MODES.indexOf(mode) === -1) mode = 'default';
+    if (mode === 'default') delete ui.sort[catId]; else ui.sort[catId] = mode;
+    saveUiPrefs();
+  }
+  // 금액 정렬: 금액 없는 항목은 항상 맨 아래, 같은 금액은 원래 순서 유지
+  function sortItems(list, mode) {
+    if (mode !== 'price-desc' && mode !== 'price-asc') return list;
+    var dir = mode === 'price-desc' ? -1 : 1;
+    return list.map(function (it, i) { return { it: it, i: i }; }).sort(function (a, b) {
+      var pa = a.it.price, pb = b.it.price;
+      if (pa === null && pb === null) return a.i - b.i;
+      if (pa === null) return 1;
+      if (pb === null) return -1;
+      if (pa !== pb) return (pa - pb) * dir;
+      return a.i - b.i;
+    }).map(function (x) { return x.it; });
   }
 
   function matchesFilter(it) {
@@ -631,7 +660,7 @@
 
   function renderOverall() {
     var p = computeProgress(state.items);
-    $('#overall-progress-text').textContent = progressText(p);
+    $('#overall-progress-text').innerHTML = progressHtml(p);
     $('#overall-progress-fill').style.width = p.percent + '%';
     $('#overall-progress-bar').setAttribute('aria-valuenow', String(p.percent));
     $('#overall-progress-bar').setAttribute('aria-valuetext', progressText(p));
@@ -644,10 +673,13 @@
       var card = document.querySelector('.category[data-category-id="' + cat.id + '"]');
       if (!card) return;
       var p = computeProgress(itemsOf(cat.id));
-      $('.progress-text', card).textContent = progressText(p);
+      $('.progress-text', card).textContent = progressText(p, true);
       $('.progress-bar__fill', card).style.width = p.percent + '%';
       $('.progress-bar', card).setAttribute('aria-valuenow', String(p.percent));
-      $('.progress-bar', card).setAttribute('aria-valuetext', progressText(p));
+      $('.progress-bar', card).setAttribute('aria-valuetext', progressText(p, true));
+      var tl = $('.cat-total__label', card), ts = $('.cat-total__sum', card);
+      if (tl) tl.textContent = '총 합계 · 금액 입력 ' + p.priced + '/' + p.total + '개' + (p.excluded ? ' (제외 ' + p.excluded + '개 미포함)' : '');
+      if (ts) ts.textContent = formatWon(p.sum);
     });
   }
 
@@ -729,7 +761,8 @@
   function renderCategory(cat) {
     var catItems = itemsOf(cat.id);
     var p = computeProgress(catItems);
-    var visible = catItems.filter(matchesFilter);
+    var sortMode = ui.editMode ? 'default' : sortModeOf(cat.id);
+    var visible = sortItems(catItems.filter(matchesFilter), sortMode);
     var titleId = 'cat-title-' + cat.id;
     var collapsed = !ui.editMode && !!ui.collapsed[cat.id];
     var bodyId = 'cat-body-' + cat.id;
@@ -763,8 +796,20 @@
     }
     html += '</div>';
 
-    html += '<div class="category__progress"><p class="progress-text">' + escapeHtml(progressText(p)) + '</p>';
-    html += '<div class="progress-bar" role="progressbar" aria-label="' + escapeHtml(cat.name) + ' 진행률" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + p.percent + '" aria-valuetext="' + escapeHtml(progressText(p)) + '"><div class="progress-bar__fill" style="width:' + p.percent + '%"></div></div></div>';
+    html += '<div class="category__progress"><p class="progress-text">' + escapeHtml(progressText(p, true)) + '</p>';
+    html += '<div class="progress-bar" role="progressbar" aria-label="' + escapeHtml(cat.name) + ' 진행률" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + p.percent + '" aria-valuetext="' + escapeHtml(progressText(p, true)) + '"><div class="progress-bar__fill" style="width:' + p.percent + '%"></div></div></div>';
+    // 총 합계(목록 위) + 금액 정렬 칩
+    if (catItems.length && !collapsed) {
+      html += '<div class="cat-total" aria-live="polite"><span class="cat-total__label">총 합계 · 금액 입력 ' + p.priced + '/' + p.total + '개' + (p.excluded ? ' (제외 ' + p.excluded + '개 미포함)' : '') + '</span><strong class="cat-total__sum">' + escapeHtml(formatWon(p.sum)) + '</strong></div>';
+      if (!ui.editMode) {
+        html += '<div class="sort-chips" role="group" aria-label="' + escapeHtml(cat.name) + ' 정렬">';
+        [['default', '기본순'], ['price-desc', '금액 높은순 ↓'], ['price-asc', '금액 낮은순 ↑']].forEach(function (o) {
+          var on = sortMode === o[0];
+          html += '<button type="button" class="sort-chip' + (on ? ' is-active' : '') + '" data-action="sort-items" data-sort="' + o[0] + '" data-focus-key="sort:' + escapeHtml(cat.id) + ':' + o[0] + '" aria-pressed="' + (on ? 'true' : 'false') + '">' + o[1] + '</button>';
+        });
+        html += '</div>';
+      }
+    }
 
     html += '<div class="category__body" id="' + bodyId + '"' + (collapsed ? ' hidden' : '') + '>';
     var bulkOpen = ui.bulkOpen === cat.id;
@@ -1312,7 +1357,7 @@ datesSorted().forEach(function (d) {
     if (!$('#view-home')) return;
     var p = computeProgress(state.items);
     var txt = progressText(p);
-    $('#home-progress-text').textContent = txt;
+    $('#home-progress-text').innerHTML = progressHtml(p);
     $('#home-progress-fill').style.width = p.percent + '%';
     $('#home-progress-bar').setAttribute('aria-valuenow', String(p.percent));
     $('#home-progress-bar').setAttribute('aria-valuetext', txt);
@@ -2679,6 +2724,14 @@ datesSorted().forEach(function (d) {
       var row = btn.closest('[data-item-id]');
       switch (btn.dataset.action) {
         case 'delete-category': deleteCategory(card.dataset.categoryId); break;
+        case 'sort-items': {
+          var scid = card.dataset.categoryId;
+          setSortMode(scid, btn.dataset.sort);
+          renderCategories();
+          var sb = document.querySelector('[data-focus-key="sort:' + scid + ':' + sortModeOf(scid) + '"]');
+          if (sb) sb.focus();
+          break;
+        }
         case 'bulk-toggle': {
           var bcid = card.dataset.categoryId;
           ui.bulkOpen = ui.bulkOpen === bcid ? null : bcid;
