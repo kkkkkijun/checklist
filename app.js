@@ -391,7 +391,7 @@
 
   /* ---------- state ---------- */
   var state;
-  var ui = { filter: 'all', editMode: false, pendingUndo: null, undoTimer: null, collapsed: {}, noteForm: null, qtyEdit: null, highlightEdit: false, activeCategory: null, highlightsCollapsed: false, itemEdit: null, view: 'checklist', picksEdit: null, picksActive: 'gpt', dateEdit: null, nameEdit: null, search: '', searchOpen: false, stripOpen: false, onboardingDismissed: false, deviceName: '', autoName: '', toastRemote: true, lastSeenActivity: 0, activity: [], supportEdit: null, memoFocus: null, seenBase: 0, templateCleared: false, bulkOpen: null, sort: {} };
+  var ui = { filter: 'all', editMode: false, pendingUndo: null, undoTimer: null, collapsed: {}, noteForm: null, qtyEdit: null, highlightEdit: false, activeCategory: null, highlightsCollapsed: false, itemEdit: null, view: 'checklist', picksEdit: null, picksActive: 'gpt', dateEdit: null, nameEdit: null, search: '', searchOpen: false, stripOpen: false, onboardingDismissed: false, deviceName: '', autoName: '', toastRemote: true, lastSeenActivity: 0, activity: [], supportEdit: null, memoFocus: null, seenBase: 0, templateCleared: false, bulkOpen: null, activityExpanded: false };
 
   // Active tab (narrow screens): falls back to the first category when the saved one is gone.
   function activeCategoryId() {
@@ -423,7 +423,6 @@
       var parsed = JSON.parse(raw);
       if (parsed && typeof parsed === 'object') {
         if (parsed.collapsed && typeof parsed.collapsed === 'object') ui.collapsed = parsed.collapsed;
-        if (parsed.sort && typeof parsed.sort === 'object') ui.sort = parsed.sort;
         if (typeof parsed.activeCategory === 'string') ui.activeCategory = parsed.activeCategory;
         ui.highlightsCollapsed = parsed.highlightsCollapsed === true;
         if (['home','checklist','notes','picks','names','settings','supports','memos'].indexOf(parsed.view) !== -1) ui.view = parsed.view;
@@ -431,6 +430,7 @@
         if (typeof parsed.deviceName === 'string') ui.deviceName = parsed.deviceName.slice(0, 12);
         if (typeof parsed.autoName === 'string') ui.autoName = parsed.autoName.slice(0, 12);
         ui.templateCleared = parsed.templateCleared === true;
+        ui.activityExpanded = parsed.activityExpanded === true;
         if (parsed.toastRemote === false) ui.toastRemote = false;
         if (typeof parsed.lastSeenActivity === 'number') ui.lastSeenActivity = parsed.lastSeenActivity;
         if (parsed.picksActive === 'gpt' || parsed.picksActive === 'claude') ui.picksActive = parsed.picksActive;
@@ -445,7 +445,6 @@
       ui.collapsed = keep;
       window.localStorage.setItem(UI_KEY, JSON.stringify({
         collapsed: ui.collapsed,
-        sort: ui.sort,
         activeCategory: ui.activeCategory,
         picksActive: ui.picksActive,
         view: ui.view,
@@ -453,6 +452,7 @@
         deviceName: ui.deviceName,
         autoName: ui.autoName,
         templateCleared: ui.templateCleared,
+        activityExpanded: ui.activityExpanded,
         toastRemote: ui.toastRemote,
         lastSeenActivity: ui.lastSeenActivity,
         highlightsCollapsed: ui.highlightsCollapsed
@@ -513,13 +513,6 @@
     return t;
   }
 
-  var SORT_MODES = ['default', 'price-desc', 'price-asc'];
-  function sortModeOf(catId) { var m = ui.sort[catId]; return SORT_MODES.indexOf(m) === -1 ? 'default' : m; }
-  function setSortMode(catId, mode) {
-    if (SORT_MODES.indexOf(mode) === -1) mode = 'default';
-    if (mode === 'default') delete ui.sort[catId]; else ui.sort[catId] = mode;
-    saveUiPrefs();
-  }
   // 금액 정렬: 금액 없는 항목은 항상 맨 아래, 같은 금액은 원래 순서 유지
   function sortItems(list, mode) {
     if (mode !== 'price-desc' && mode !== 'price-asc') return list;
@@ -761,8 +754,8 @@
   function renderCategory(cat) {
     var catItems = itemsOf(cat.id);
     var p = computeProgress(catItems);
-    var sortMode = ui.editMode ? 'default' : sortModeOf(cat.id);
-    var visible = sortItems(catItems.filter(matchesFilter), sortMode);
+    // 보기 모드는 항상 금액 높은순(미입력은 맨 아래), 편집 모드는 ▲▼로 정한 기본 순서
+    var visible = sortItems(catItems.filter(matchesFilter), ui.editMode ? 'default' : 'price-desc');
     var titleId = 'cat-title-' + cat.id;
     var collapsed = !ui.editMode && !!ui.collapsed[cat.id];
     var bodyId = 'cat-body-' + cat.id;
@@ -801,14 +794,6 @@
     // 총 합계(목록 위) + 금액 정렬 칩
     if (catItems.length && !collapsed) {
       html += '<div class="cat-total" aria-live="polite"><span class="cat-total__label">총 합계 · 금액 입력 ' + p.priced + '/' + p.total + '개' + (p.excluded ? ' (제외 ' + p.excluded + '개 미포함)' : '') + '</span><strong class="cat-total__sum">' + escapeHtml(formatWon(p.sum)) + '</strong></div>';
-      if (!ui.editMode) {
-        html += '<div class="sort-chips" role="group" aria-label="' + escapeHtml(cat.name) + ' 정렬">';
-        [['default', '기본순'], ['price-desc', '금액 높은순 ↓'], ['price-asc', '금액 낮은순 ↑']].forEach(function (o) {
-          var on = sortMode === o[0];
-          html += '<button type="button" class="sort-chip' + (on ? ' is-active' : '') + '" data-action="sort-items" data-sort="' + o[0] + '" data-focus-key="sort:' + escapeHtml(cat.id) + ':' + o[0] + '" aria-pressed="' + (on ? 'true' : 'false') + '">' + o[1] + '</button>';
-        });
-        html += '</div>';
-      }
     }
 
     html += '<div class="category__body" id="' + bodyId + '"' + (collapsed ? ' hidden' : '') + '>';
@@ -1504,17 +1489,27 @@ datesSorted().forEach(function (d) {
     var S = window.ChecklistSync;
     var st = S ? S.getState() : null;
     var clearBtn = $('#activity-clear');
+    var toggleBtn = $('#activity-toggle');
     if (!st || !st.roomId) {
       list.innerHTML = '<li class="activity-empty">가족 공유를 연결하면 서로의 변경 내용이 여기에 표시됩니다.</li>';
       if (clearBtn) clearBtn.hidden = true;
+      if (toggleBtn) toggleBtn.hidden = true;
       return;
     }
     var me = myName();
-    var items = ui.activity.slice().sort(function (a, b) { return b.t - a.t; }).slice(0, 30);
-    if (!items.length) { list.innerHTML = '<li class="activity-empty">아직 변경 기록이 없습니다.</li>'; if (clearBtn) clearBtn.hidden = true; return; }
+    var all = ui.activity.slice().sort(function (a, b) { return b.t - a.t; }).slice(0, 30);
+    if (!all.length) { list.innerHTML = '<li class="activity-empty">아직 변경 기록이 없습니다.</li>'; if (clearBtn) clearBtn.hidden = true; if (toggleBtn) toggleBtn.hidden = true; return; }
     var base = Math.min(ui.seenBase || 0, ui.lastSeenActivity);
-    var fresh = items.filter(function (a) { return a.t > base && a.who !== me; }).length;
+    var fresh = all.filter(function (a) { return a.t > base && a.who !== me; }).length;
     if (clearBtn) clearBtn.hidden = fresh === 0;
+    // 접힌 상태에서는 최근 5개만
+    var LIMIT = 5;
+    var items = ui.activityExpanded ? all : all.slice(0, LIMIT);
+    if (toggleBtn) {
+      toggleBtn.hidden = all.length <= LIMIT;
+      toggleBtn.textContent = ui.activityExpanded ? '접기 ▴' : '펼치기 ▾ (' + (all.length - LIMIT) + '개 더)';
+      toggleBtn.setAttribute('aria-expanded', ui.activityExpanded ? 'true' : 'false');
+    }
     list.innerHTML = items.map(function (a) {
       var unread = a.t > base && a.who !== me;
       return '<li class="activity' + (unread ? ' is-unread' : '') + '"><span class="activity__who">' + escapeHtml(a.who || '누군가') + '</span>' +
@@ -2436,6 +2431,8 @@ datesSorted().forEach(function (d) {
     });
     var actClear = $('#activity-clear');
     if (actClear) actClear.addEventListener('click', function () { markActivitySeen(true); ui.seenBase = ui.lastSeenActivity; renderActivity(); });
+    var actToggle = $('#activity-toggle');
+    if (actToggle) actToggle.addEventListener('click', function () { ui.activityExpanded = !ui.activityExpanded; saveUiPrefs(); renderActivity(); });
 
     // 설정
     var dnInput = $('#device-name');
@@ -2724,14 +2721,6 @@ datesSorted().forEach(function (d) {
       var row = btn.closest('[data-item-id]');
       switch (btn.dataset.action) {
         case 'delete-category': deleteCategory(card.dataset.categoryId); break;
-        case 'sort-items': {
-          var scid = card.dataset.categoryId;
-          setSortMode(scid, btn.dataset.sort);
-          renderCategories();
-          var sb = document.querySelector('[data-focus-key="sort:' + scid + ':' + sortModeOf(scid) + '"]');
-          if (sb) sb.focus();
-          break;
-        }
         case 'bulk-toggle': {
           var bcid = card.dataset.categoryId;
           ui.bulkOpen = ui.bulkOpen === bcid ? null : bcid;

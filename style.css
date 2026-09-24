@@ -244,6 +244,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .activity__text { min-width: 0; overflow-wrap: anywhere; }
 .activity__time { font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
 .activity-empty { padding: 8px 6px; color: var(--muted); font-size: 0.88rem; }
+#activity-card .settings-actions { flex-wrap: nowrap; }
+.activity-toggle { white-space: nowrap; }
 .memo-input { width: 100%; min-height: 96px; margin-top: 8px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: #fff; resize: vertical; line-height: 1.55; font-size: 1rem; }
 .memo-status { margin: 0; font-size: 0.78rem; color: var(--muted); }
 .home-link {
@@ -589,11 +591,6 @@ input[type="number"] { -moz-appearance: textfield; }
 .cat-total__label { font-size: 0.78rem; font-weight: 600; color: #993c1d; min-width: 0; }
 .cat-total__sum { font-size: 1.25rem; font-weight: 800; color: #712b13; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .progress-line__text .sum, #home-progress-text .sum { font-weight: 800; color: #712b13; }
-.sort-chips { display: flex; gap: 6px; margin: 0 0 6px; }
-.sort-chip { flex: 1 1 0; min-width: 0; min-height: 38px; padding: 0 6px; border-radius: 999px; border: 1px solid var(--border); background: var(--card); color: var(--muted); font: inherit; font-size: 0.8rem; font-weight: 600; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sort-chip:hover { border-color: var(--peach); }
-.sort-chip.is-active { background: var(--peach-soft); border-color: var(--peach-strong); color: var(--peach-strong); }
-.sort-chip:focus-visible { outline: 3px solid var(--focus); outline-offset: 1px; }
 .category__progress .progress-text { font-size: 0.85rem; margin-bottom: 5px; }
 .category__progress .progress-bar { height: 8px; }
 .is-collapsed .category__progress { margin-bottom: 0; }

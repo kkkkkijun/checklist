@@ -15,7 +15,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="마미백">
   <meta name="mobile-web-app-capable" content="yes">
-  <link rel="stylesheet" href="./style.css?v=20260924e">
+  <link rel="stylesheet" href="./style.css?v=20260924g">
 </head>
 <body>
   <a class="skip-link" href="#main-area">본문으로 건너뛰기</a>
@@ -70,7 +70,10 @@
     <section class="home-card" id="activity-card" aria-labelledby="activity-title">
       <div class="progress-head">
         <h2 id="activity-title" class="home-card__title">🔔 최근 변경</h2>
-        <button type="button" class="btn btn--small" id="activity-clear" hidden>모두 읽음</button>
+        <div class="settings-actions">
+          <button type="button" class="btn btn--small" id="activity-clear" hidden>모두 읽음</button>
+          <button type="button" class="btn btn--small activity-toggle" id="activity-toggle" aria-expanded="false" aria-controls="activity-list" hidden>펼치기</button>
+        </div>
       </div>
       <ul class="activity-list" id="activity-list"></ul>
     </section>
@@ -306,9 +309,9 @@
     <button type="button" class="toast__close" id="toast-close" aria-label="알림 닫기">×</button>
   </div>
 
-  <script src="./firebase-config.js?v=20260924e"></script>
-  <script src="./app.js?v=20260924e"></script>
-  <script src="./sync.js?v=20260924e"></script>
+  <script src="./firebase-config.js?v=20260924g"></script>
+  <script src="./app.js?v=20260924g"></script>
+  <script src="./sync.js?v=20260924g"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function () {
