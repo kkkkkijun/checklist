@@ -423,6 +423,10 @@ body:not(.is-checklist-view) #add-category-btn { display: none; }
   background: var(--card); color: var(--text); font-weight: 600; font-size: 0.9rem; cursor: pointer;
   white-space: nowrap;
 }
+.category-tab { touch-action: pan-x; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.category-tab.is-dragging { position: relative; z-index: 2; opacity: 0.95; border-color: var(--peach-strong); box-shadow: 0 6px 16px rgba(0,0,0,0.18); cursor: grabbing; }
+.category-tabs.is-reordering { cursor: grabbing; }
+.category-tabs.is-reordering .category-tab:not(.is-dragging) { transition: transform 0.12s; }
 .category-tab__icon { font-size: 1.05em; line-height: 1; }
 .category-tab__count { font-size: 0.78rem; font-weight: 500; color: var(--muted); font-variant-numeric: tabular-nums; }
 .category-tab.is-active { background: var(--peach-strong); border-color: var(--peach-strong); color: #fff; }

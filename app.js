@@ -2861,6 +2861,94 @@ datesSorted().forEach(function (d) {
     window.addEventListener('load', bindShareEvents);
   }
 
+  /* ---------- 분류 탭 드래그로 순서 변경 (PC: 바로 끌기, 터치: 길게 누른 뒤 끌기) ---------- */
+  function setupCategoryDrag() {
+    var bar = $('#category-tabs');
+    if (!bar) return;
+    var LONG = 350, THRESH = 8;
+    var drag = null, suppressClick = false;
+    function tabs() { return Array.prototype.filter.call(bar.querySelectorAll('.category-tab'), function (t) { return !t.classList.contains('category-tab--add'); }); }
+    function setTx(tx) { drag.tx = tx; drag.el.style.transform = tx ? 'translateX(' + tx + 'px)' : ''; }
+    function naturalLeft() { return drag.el.getBoundingClientRect().left - drag.tx; }
+    function activate(e) {
+      drag.active = true;
+      drag.grabOffset = e.clientX - drag.el.getBoundingClientRect().left;
+      drag.el.classList.add('is-dragging');
+      bar.classList.add('is-reordering');
+      try { drag.el.setPointerCapture(drag.pointerId); } catch (err) { /* ignore */ }
+    }
+    function cleanup() {
+      if (!drag) return;
+      clearTimeout(drag.timer);
+      drag.el.classList.remove('is-dragging');
+      drag.el.style.transform = '';
+      bar.classList.remove('is-reordering');
+      try { drag.el.releasePointerCapture(drag.pointerId); } catch (err) { /* ignore */ }
+      drag = null;
+    }
+    function commitOrder() {
+      var ids = tabs().map(function (t) { return t.dataset.categoryId; });
+      var before = state.categories.map(function (c) { return c.id; }).join('|');
+      if (ids.join('|') === before) return false;
+      var byId = {}; state.categories.forEach(function (c) { byId[c.id] = c; });
+      var next = []; ids.forEach(function (id) { if (byId[id]) next.push(byId[id]); });
+      state.categories.forEach(function (c) { if (next.indexOf(c) === -1) next.push(c); });
+      state.categories = next;
+      commit();
+      act('category', '분류 순서 변경 (' + next.map(function (c) { return c.name; }).join(' › ') + ')');
+      showToast('분류 순서를 바꿨습니다.');
+      return true;
+    }
+    bar.addEventListener('pointerdown', function (e) {
+      var el = e.target.closest('.category-tab');
+      if (!el || el.classList.contains('category-tab--add') || !bar.contains(el)) return;
+      if (typeof e.button === 'number' && e.button !== 0) return;
+      if (tabs().length < 2) return;
+      cleanup();
+      drag = { el: el, pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, active: false, tx: 0, grabOffset: 0, touch: e.pointerType !== 'mouse', timer: null };
+      if (drag.touch) drag.timer = setTimeout(function () { if (drag && !drag.active) activate(e); }, LONG);
+    });
+    bar.addEventListener('pointermove', function (e) {
+      if (!drag || e.pointerId !== drag.pointerId) return;
+      var dx = e.clientX - drag.startX, dy = e.clientY - drag.startY;
+      if (!drag.active) {
+        if (Math.abs(dx) <= THRESH && Math.abs(dy) <= THRESH) return;
+        if (drag.touch) { cleanup(); return; } // 길게 누르기 전에 움직이면 스크롤로 취급
+        activate(e);
+      }
+      e.preventDefault();
+      var desiredLeft = e.clientX - drag.grabOffset;
+      setTx(desiredLeft - naturalLeft());
+      var center = desiredLeft + drag.el.offsetWidth / 2;
+      var others = tabs().filter(function (t) { return t !== drag.el; });
+      var target = 0;
+      others.forEach(function (t) { var r = t.getBoundingClientRect(); if (center > r.left + r.width / 2) target++; });
+      var current = tabs().indexOf(drag.el);
+      if (target !== current) {
+        var ref = others[target] || bar.querySelector('.category-tab--add');
+        bar.insertBefore(drag.el, ref || null);
+        setTx(desiredLeft - naturalLeft());
+      }
+    });
+    function finish(e, cancelled) {
+      if (!drag || (e && e.pointerId !== drag.pointerId)) return;
+      var wasActive = drag.active;
+      cleanup();
+      if (!wasActive) return;
+      suppressClick = true;
+      setTimeout(function () { suppressClick = false; }, 80);
+      if (cancelled) { renderTabs(); return; }
+      if (!commitOrder()) renderTabs();
+    }
+    bar.addEventListener('pointerup', function (e) { finish(e, false); });
+    bar.addEventListener('pointercancel', function (e) { finish(e, true); });
+    bar.addEventListener('lostpointercapture', function (e) { if (drag && drag.active && e.pointerId === drag.pointerId) finish(e, false); });
+    // 드래그 중에는 탭 줄 가로 스크롤·페이지 스크롤을 막는다 (터치)
+    bar.addEventListener('touchmove', function (e) { if (drag && drag.active) e.preventDefault(); }, { passive: false });
+    bar.addEventListener('contextmenu', function (e) { if (drag) e.preventDefault(); });
+    bar.addEventListener('click', function (e) { if (suppressClick) { e.stopPropagation(); e.preventDefault(); } }, true);
+  }
+
   /* ---------- 당겨서 새로고침 (홈 화면 웹앱 전용) ---------- */
   function setupPullToRefresh() {
     var standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
@@ -2900,6 +2988,6 @@ datesSorted().forEach(function (d) {
     document.addEventListener('touchcancel', reset, { passive: true });
   }
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { init(); setupPullToRefresh(); });
-  else { init(); setupPullToRefresh(); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { init(); setupCategoryDrag(); setupPullToRefresh(); });
+  else { init(); setupCategoryDrag(); setupPullToRefresh(); }
 })();
