@@ -623,12 +623,12 @@ input[type="number"] { -moz-appearance: textfield; }
 .item__qty[aria-expanded="true"] { background: var(--peach-soft); border-color: var(--peach-strong); }
 .is-qty-editing { background: #fffdfb; border-color: var(--border); }
 .item__qty-edit { display: grid; gap: 6px; padding: 4px 4px 8px 4px; }
-.item__qty-edit__row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 6px; align-items: end; }
+.item__qty-edit__row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; align-items: end; }
 .item__qty-done { min-height: var(--tap); }
-@media (max-width: 360px) {
-  .item__qty-edit__row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-  .item__qty-done { grid-column: 1 / -1; }
-}
+/* 금액 입력: 오른쪽 정렬 + '원' 표시 */
+.price-field { position: relative; }
+.price-field input { width: 100%; padding-right: 34px; text-align: right; font-variant-numeric: tabular-nums; }
+.price-field__suffix { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 0.9rem; pointer-events: none; }
 
 .item__check {
   display: flex; align-items: flex-start; gap: 10px; flex: 1; min-width: 0; cursor: pointer;
@@ -669,7 +669,6 @@ input[type="number"] { -moz-appearance: textfield; }
 .field > label, .field__label { font-size: 0.8rem; color: var(--muted); }
 .field-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
 .field-row > .field { min-width: 0; }
-.field-row--unit { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 .item__actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 2px; }
 .item__actions .field { flex: 1 1 140px; }
 .item__actions select { min-height: 40px; }

@@ -5,7 +5,6 @@
   var STORAGE_KEY = 'birth-bag-checklist';
   var UI_KEY = 'birth-bag-checklist:ui';
   var DATA_VERSION = 1;
-  var UNIT_PRESETS = ['개', '벌', '팩', '장', '쌍', '세트'];
   var UNDO_MS = 8000;
   var ICON_PRESETS = ['🧳', '🛏️', '👶🏻', '🤱🏻', '🍼', '🧸', '🏥', '🎒', '🧴', '👕', '📄', '✨'];
   var ICON_MAX = 16; // UTF-16 code units; enough for one multi-codepoint emoji
@@ -88,6 +87,30 @@
     return { ok: true, value: n };
   }
 
+  // 금액: 숫자만 남겨 정수(원)로. 빈 값은 null. '5,000', '5000원', '5천원', '1.5만원' 허용
+  var PRICE_MAX = 999999999;
+  function parsePrice(value) {
+    var t = String(value == null ? '' : value).trim().replace(/원$/, '').trim();
+    if (t === '') return { ok: true, value: null };
+    var k = t.match(/^(\d+(?:\.\d+)?)\s*(만|천)$/);
+    var n;
+    if (k) n = Math.round(parseFloat(k[1]) * (k[2] === '만' ? 10000 : 1000));
+    else {
+      var digits = t.replace(/[,\s]/g, '');
+      if (!/^\d+$/.test(digits)) return { ok: false, value: null };
+      n = parseInt(digits, 10);
+    }
+    if (!isFinite(n) || n < 0 || n > PRICE_MAX) return { ok: false, value: null };
+    return { ok: true, value: n };
+  }
+  function formatNumber(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+  function formatWon(n) { return n === null || n === undefined ? '' : formatNumber(n) + '원'; }
+  // 입력 중 쉼표 자동 삽입 (커서는 끝으로)
+  function formatPriceInput(el) {
+    var digits = el.value.replace(/[^\d]/g, '').replace(/^0+(?=\d)/, '').slice(0, 9);
+    el.value = digits ? formatNumber(digits) : '';
+  }
+
   function todayStamp() {
     var d = new Date();
     var p = function (n) { return (n < 10 ? '0' : '') + n; };
@@ -155,18 +178,18 @@
       if (seenItem[iid]) return { ok: false, error: '준비물 ID가 중복되었습니다: ' + iid };
       if (typeof it.categoryId !== 'string' || !seen[it.categoryId]) return { ok: false, error: '"' + iname + '" 항목이 존재하지 않는 분류를 가리킵니다.' };
       seenItem[iid] = true;
-      var q = null;
-      if (it.qty !== null && it.qty !== undefined && it.qty !== '') {
-        var pq = parseQty(it.qty);
-        if (!pq.ok) return { ok: false, error: '"' + iname + '" 항목의 수량이 올바르지 않습니다.' };
-        q = pq.value;
+      var price = null;
+      if (it.price !== null && it.price !== undefined && it.price !== '') {
+        var pp = parsePrice(it.price);
+        if (!pp.ok) return { ok: false, error: '"' + iname + '" 항목의 금액이 올바르지 않습니다.' };
+        price = pp.value;
       }
+      // (구버전 백업의 qty/unit는 무시한다: 수량 칸이 금액 칸으로 바뀜)
       items.push({
         id: iid,
         categoryId: it.categoryId,
         name: iname.slice(0, 60),
-        qty: q,
-        unit: typeof it.unit === 'string' ? it.unit.trim().slice(0, 10) : '',
+        price: price,
         memo: typeof it.memo === 'string' ? it.memo.trim().slice(0, 200) : '',
         done: it.done === true,
         excluded: it.excluded === true
@@ -457,17 +480,19 @@
   }
 
   function computeProgress(items) {
-    var total = 0, done = 0, excluded = 0;
+    var total = 0, done = 0, excluded = 0, sum = 0;
     items.forEach(function (it) {
       if (it.excluded) { excluded++; return; }
       total++;
       if (it.done) done++;
+      if (typeof it.price === 'number') sum += it.price;
     });
     var percent = 0;
+    var result_sum = sum;
     if (total > 0) {
       percent = done === total ? 100 : Math.min(99, Math.floor((done / total) * 100));
     }
-    return { total: total, done: done, excluded: excluded, percent: percent };
+    return { total: total, done: done, excluded: excluded, percent: percent, sum: result_sum };
   }
 
   function progressText(p) {
@@ -476,6 +501,7 @@
     }
     var t = p.done + '/' + p.total + '개 완료 · ' + p.percent + '%';
     if (p.excluded > 0) t += ' · 제외 ' + p.excluded + '개';
+    if (p.sum > 0) t += ' · 합계 ' + formatWon(p.sum);
     return t;
   }
 
@@ -644,7 +670,7 @@
         var it = m.it;
         var cls = 'item search-item' + (it.done ? ' is-done' : '') + (it.excluded ? ' is-excluded' : '');
         var meta = [];
-        if (it.qty !== null) meta.push('수량 ' + it.qty + (it.unit ? it.unit : ''));
+        if (it.price !== null) meta.push('금액 ' + formatWon(it.price));
         var h = '<li class="' + cls + '" data-item-id="' + escapeHtml(it.id) + '"><div class="item__row"><label class="item__check">';
         h += '<input type="checkbox" data-action="toggle-done"' + (it.done ? ' checked' : '') + (it.excluded ? ' disabled' : '') + ' aria-label="' + escapeHtml(it.name) + ' 가방에 담기 완료">';
         h += '<span class="item__body"><span class="item__name">' + escapeHtml(it.name) + '</span>';
@@ -744,20 +770,20 @@
     var bulkOpen = ui.bulkOpen === cat.id;
     html += '<form class="inline-form quick-add" data-action="add-item">';
     html += '<label class="visually-hidden" for="new-item-' + escapeHtml(cat.id) + '">' + escapeHtml(cat.name) + '에 추가할 준비물</label>';
-    html += '<input type="text" id="new-item-' + escapeHtml(cat.id) + '" data-focus-key="new-item:' + escapeHtml(cat.id) + '" placeholder="준비물 이름 (예: 수유 패드 2팩)" maxlength="80" autocomplete="off" enterkeyhint="done">';
+    html += '<input type="text" id="new-item-' + escapeHtml(cat.id) + '" data-focus-key="new-item:' + escapeHtml(cat.id) + '" placeholder="준비물 이름 (예: 수유 패드 5,000원)" maxlength="80" autocomplete="off" enterkeyhint="done">';
     html += '<button type="submit" class="btn btn--primary">추가</button>';
     html += '<button type="button" class="btn quick-add__bulk' + (bulkOpen ? ' is-active' : '') + '" data-action="bulk-toggle" data-focus-key="bulk-toggle:' + escapeHtml(cat.id) + '" aria-expanded="' + (bulkOpen ? 'true' : 'false') + '" aria-controls="bulk-' + escapeHtml(cat.id) + '">여러 개</button>';
     html += '</form>';
     html += '<form class="bulk-add" id="bulk-' + escapeHtml(cat.id) + '" data-action="bulk-add"' + (bulkOpen ? '' : ' hidden') + '>';
     html += '<label class="visually-hidden" for="bulk-text-' + escapeHtml(cat.id) + '">한 줄에 하나씩 준비물 입력</label>';
-    html += '<textarea id="bulk-text-' + escapeHtml(cat.id) + '" data-focus-key="bulk-text:' + escapeHtml(cat.id) + '" rows="6" placeholder="한 줄에 하나씩 적으세요&#10;수유 패드 2팩&#10;산모 수첩&#10;물티슈 3개"></textarea>';
-    html += '<div class="bulk-add__actions"><span class="bulk-add__hint">이름 뒤에 수량·단위를 적으면 함께 저장됩니다. 메모장·카톡에서 복사한 목록을 그대로 붙여넣어도 됩니다.</span>';
+    html += '<textarea id="bulk-text-' + escapeHtml(cat.id) + '" data-focus-key="bulk-text:' + escapeHtml(cat.id) + '" rows="6" placeholder="한 줄에 하나씩 적으세요&#10;수유 패드 5,000원&#10;산모 수첩&#10;물티슈 12000"></textarea>';
+    html += '<div class="bulk-add__actions"><span class="bulk-add__hint">이름 뒤에 금액을 적으면 함께 저장됩니다(예: 물티슈 12000, 젖병 1.5만원). 메모장·카톡에서 복사한 목록을 그대로 붙여넣어도 됩니다.</span>';
     html += '<button type="submit" class="btn btn--primary btn--small">모두 추가</button></div>';
     html += '</form>';
     if (visible.length === 0) {
       html += '<p class="items-empty">' + escapeHtml(emptyMessage(catItems)) + '</p>';
     } else {
-      if (!ui.editMode) html += '<div class="items-colhead" aria-hidden="true"><span>준비물</span><span>필요 수량</span></div>';
+      if (!ui.editMode) html += '<div class="items-colhead" aria-hidden="true"><span>준비물</span><span>금액</span></div>';
       html += '<ul class="items">' + visible.map(ui.editMode ? renderItemEdit : renderItemView).join('') + '</ul>';
     }
 
@@ -766,21 +792,9 @@
     return html;
   }
 
-  function qtyLabel(it) {
-    if (it.qty === null) return '';
-    return it.qty + (it.unit ? it.unit : '');
-  }
-
-  function unitSelectHtml(it, id, focusPrefix) {
-    var isCustom = it.unit && UNIT_PRESETS.indexOf(it.unit) === -1;
-    var html = '<select id="' + focusPrefix + 'unit-' + id + '" data-field="unit-select" data-focus-key="' + focusPrefix + 'unit:' + id + '">';
-    html += '<option value=""' + (!it.unit ? ' selected' : '') + '>선택 안 함</option>';
-    UNIT_PRESETS.forEach(function (u) {
-      html += '<option value="' + escapeHtml(u) + '"' + (it.unit === u ? ' selected' : '') + '>' + escapeHtml(u) + '</option>';
-    });
-    html += '<option value="__custom__"' + (isCustom ? ' selected' : '') + '>직접 입력</option>';
-    html += '</select>';
-    return html;
+  function qtyLabel(it) { return formatWon(it.price); }
+  function priceFieldHtml(it, id, focusKey) {
+    return '<div class="price-field"><input type="text" id="' + focusKey.replace(':', '-') + '" data-field="price" data-focus-key="' + focusKey + '" value="' + (it.price === null ? '' : formatNumber(it.price)) + '" inputmode="numeric" autocomplete="off" maxlength="11" placeholder="예: 5,000"><span class="price-field__suffix" aria-hidden="true">원</span></div>';
   }
 
   function renderItemView(it) {
@@ -802,20 +816,15 @@
       html += '<button type="button" class="btn btn--small" data-action="toggle-excluded" data-focus-key="excl:' + id + '" aria-label="' + escapeHtml(it.name) + ' 다시 포함">다시 포함</button>';
     } else {
       var label = qtyLabel(it);
-      html += '<button type="button" class="item__qty' + (label ? '' : ' item__qty--empty') + '" data-action="edit-qty" data-focus-key="qty-btn:' + id + '" aria-expanded="' + (editing ? 'true' : 'false') + '" aria-label="' + escapeHtml(it.name) + ' 필요 수량 ' + (label ? escapeHtml(label) : '미입력') + ', 누르면 수정">' + (label ? escapeHtml(label) : '<span aria-hidden="true">＋</span>') + '</button>';
+      html += '<button type="button" class="item__qty' + (label ? '' : ' item__qty--empty') + '" data-action="edit-qty" data-focus-key="qty-btn:' + id + '" aria-expanded="' + (editing ? 'true' : 'false') + '" aria-label="' + escapeHtml(it.name) + ' 금액 ' + (label ? escapeHtml(label) : '미입력') + ', 누르면 수정">' + (label ? escapeHtml(label) : '<span aria-hidden="true">＋</span>') + '</button>';
     }
     html += '</div></div>';
     if (editing) {
-      var isCustom = it.unit && UNIT_PRESETS.indexOf(it.unit) === -1;
       html += '<div class="item__qty-edit">';
       html += '<div class="item__qty-edit__row">';
-      html += '<div class="field"><label for="q-qty-' + id + '">필요 수량</label>';
-      html += '<input type="number" id="q-qty-' + id + '" data-field="qty" data-focus-key="q-qty:' + id + '" value="' + (it.qty === null ? '' : it.qty) + '" min="1" step="1" inputmode="numeric" placeholder="미입력"></div>';
-      html += '<div class="field"><label for="q-unit-' + id + '">단위</label>' + unitSelectHtml(it, id, 'q-') + '</div>';
+      html += '<div class="field"><label for="q-qty-' + id + '">금액</label>' + priceFieldHtml(it, id, 'q-qty:' + id) + '</div>';
       html += '<button type="button" class="btn btn--primary btn--small item__qty-done" data-action="close-qty" data-focus-key="q-done:' + id + '">완료</button>';
       html += '</div>';
-      html += '<div class="field"' + (isCustom ? '' : ' hidden') + ' data-custom-unit><label for="q-unit-custom-' + id + '">단위 직접 입력</label>';
-      html += '<input type="text" id="q-unit-custom-' + id + '" data-field="unit-custom" data-focus-key="q-unitc:' + id + '" value="' + (isCustom ? escapeHtml(it.unit) : '') + '" maxlength="10" placeholder="예: 통, 병"></div>';
       html += '<p class="field-error" data-error hidden></p>';
       html += '</div>';
     }
@@ -844,22 +853,13 @@
       return h;
     }
     var cls = 'item item--edit' + (it.done ? ' is-done' : '') + (it.excluded ? ' is-excluded' : '');
-    var isCustom = it.unit && UNIT_PRESETS.indexOf(it.unit) === -1;
     var html = '<li class="' + cls + '" data-item-id="' + id + '">';
     html += '<div class="item__edit-grid">';
 
     html += '<div class="field"><label for="name-' + id + '">이름' + badges + '</label>';
     html += '<input type="text" id="name-' + id + '" data-field="name" data-focus-key="name:' + id + '" value="' + escapeHtml(it.name) + '" maxlength="60" required></div>';
 
-    html += '<div class="field-row field-row--unit">';
-    html += '<div class="field"><label for="qty-' + id + '">필요 수량</label>';
-    html += '<input type="number" id="qty-' + id + '" data-field="qty" data-focus-key="qty:' + id + '" value="' + (it.qty === null ? '' : it.qty) + '" min="1" step="1" inputmode="numeric" placeholder="미입력"></div>';
-    html += '<div class="field"><label for="unit-' + id + '">단위</label>';
-    html += unitSelectHtml(it, id, '') + '</div>';
-    html += '</div>';
-
-    html += '<div class="field"' + (isCustom ? '' : ' hidden') + ' data-custom-unit><label for="unit-custom-' + id + '">단위 직접 입력</label>';
-    html += '<input type="text" id="unit-custom-' + id + '" data-field="unit-custom" data-focus-key="unitc:' + id + '" value="' + (isCustom ? escapeHtml(it.unit) : '') + '" maxlength="10" placeholder="예: 통, 병"></div>';
+    html += '<div class="field"><label for="qty-' + id + '">금액</label>' + priceFieldHtml(it, id, 'qty:' + id) + '</div>';
 
     html += '<div class="field"><label for="memo-' + id + '">메모 (선택)</label>';
     html += '<input type="text" id="memo-' + id + '" data-field="memo" data-focus-key="memo:' + id + '" value="' + escapeHtml(it.memo) + '" maxlength="200" placeholder="예: 출발 직전에 챙기기, 병원 제공, 보호자 담당"></div>';
@@ -1752,18 +1752,22 @@ datesSorted().forEach(function (d) {
     var t = String(line || '').replace(/^[\s\-•·*\d]*[.)]?\s*(?=\S)/, '').trim();
     t = t.replace(/^[-•·*]\s*/, '').trim();
     if (!t) return null;
-    var m = t.match(/^(.+?)[\s,]+(?:[xX×]\s*)?(\d{1,4})\s*([가-힣A-Za-z]{0,4})$/);
-    if (m && m[1].trim()) return { name: m[1].trim().slice(0, 60), qty: parseInt(m[2], 10) || null, unit: m[3].slice(0, 10) };
-    return { name: t.slice(0, 60), qty: null, unit: '' };
+    // 끝에 붙은 금액: "5,000", "5000원", "5천원", "1.5만원"
+    var m = t.match(/^(.+?)[\s:]+((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?\s*(?:만|천)?\s*원?)$/);
+    if (m && m[1].trim()) {
+      var pp = parsePrice(m[2]);
+      if (pp.ok) return { name: m[1].trim().slice(0, 60), price: pp.value };
+    }
+    return { name: t.slice(0, 60), price: null };
   }
   function addItem(categoryId, text) {
     var p = parseItemLine(text);
     if (!p) { showToast('준비물 이름을 입력하세요.'); return false; }
     if (!findCategory(categoryId)) return false;
-    state.items.push({ id: uid(), categoryId: categoryId, name: p.name, qty: p.qty, unit: p.qty ? p.unit : '', memo: '', done: false, excluded: false });
+    state.items.push({ id: uid(), categoryId: categoryId, name: p.name, price: p.price, memo: '', done: false, excluded: false });
     commit();
     act('add', '‘' + p.name + '’ 추가');
-    showToast('‘' + p.name + '’ 추가' + (p.qty ? ' · ' + p.qty + p.unit : ''));
+    showToast('‘' + p.name + '’ 추가' + (p.price !== null ? ' · ' + formatWon(p.price) : ''));
     return true;
   }
   function addItems(categoryId, text) {
@@ -1771,7 +1775,7 @@ datesSorted().forEach(function (d) {
     var added = [];
     String(text || '').split(/\r?\n/).forEach(function (line) {
       var p = parseItemLine(line); if (!p) return;
-      state.items.push({ id: uid(), categoryId: categoryId, name: p.name, qty: p.qty, unit: p.qty ? p.unit : '', memo: '', done: false, excluded: false });
+      state.items.push({ id: uid(), categoryId: categoryId, name: p.name, price: p.price, memo: '', done: false, excluded: false });
       added.push(p.name);
     });
     if (!added.length) { showToast('추가할 준비물이 없습니다. 한 줄에 하나씩 적어 주세요.'); return 0; }
@@ -1820,7 +1824,7 @@ datesSorted().forEach(function (d) {
     if (items.length < 20) return false;
     for (var i = 0; i < items.length; i++) {
       var it = items[i];
-      if (!TEMPLATE_NAMES[it.name] || it.done || it.excluded || it.qty !== null || it.memo) return false;
+      if (!TEMPLATE_NAMES[it.name] || it.done || it.excluded || it.price !== null || it.memo) return false;
     }
     return true;
   }
@@ -1931,30 +1935,15 @@ datesSorted().forEach(function (d) {
         setError('');
         break;
       }
-      case 'qty': {
-        var pq = parseQty(inputEl.value);
-        if (!pq.ok) { inputEl.value = it.qty === null ? '' : it.qty; setError('수량은 비워두거나 1 이상의 정수만 입력할 수 있습니다.'); return; }
-        it.qty = pq.value;
-        inputEl.value = pq.value === null ? '' : pq.value;
+      case 'price': {
+        var pp = parsePrice(inputEl.value);
+        if (!pp.ok) { inputEl.value = it.price === null ? '' : formatNumber(it.price); setError('금액은 비워두거나 숫자만 입력할 수 있습니다 (예: 5,000).'); return; }
+        if (pp.value === it.price) { inputEl.value = pp.value === null ? '' : formatNumber(pp.value); setError(''); return; }
+        it.price = pp.value;
+        inputEl.value = pp.value === null ? '' : formatNumber(pp.value);
         setError('');
         break;
       }
-      case 'unit-select': {
-        var customWrap = $('[data-custom-unit]', rowEl);
-        var customInput = $('[data-field="unit-custom"]', rowEl);
-        if (inputEl.value === '__custom__') {
-          customWrap.hidden = false;
-          it.unit = customInput.value.trim().slice(0, 10);
-          customInput.focus();
-        } else {
-          customWrap.hidden = true;
-          it.unit = inputEl.value;
-        }
-        break;
-      }
-      case 'unit-custom':
-        it.unit = inputEl.value.trim().slice(0, 10);
-        break;
       case 'memo':
         it.memo = inputEl.value.trim().slice(0, 200);
         break;
@@ -1964,14 +1953,14 @@ datesSorted().forEach(function (d) {
     saveState();
     refreshProgress();
     if (field === 'name') act('edit', '‘' + it.name + '’ 이름 수정');
-    else if (field === 'qty' || field === 'unit-select' || field === 'unit-custom') act('edit', '‘' + it.name + '’ 수량 ' + (qtyLabel(it) || '미입력') + '로 변경');
+    else if (field === 'price') act('edit', '‘' + it.name + '’ 금액 ' + (qtyLabel(it) || '미입력') + '로 변경');
     else if (field === 'memo') act('edit', '‘' + it.name + '’ 메모 수정');
     var qtyBtn = $('.item__qty', rowEl);
     if (qtyBtn) {
       var label = qtyLabel(it);
       if (label) qtyBtn.textContent = label; else qtyBtn.innerHTML = '<span aria-hidden="true">＋</span>';
       qtyBtn.classList.toggle('item__qty--empty', !label);
-      qtyBtn.setAttribute('aria-label', it.name + ' 필요 수량 ' + (label || '미입력') + ', 누르면 수정');
+      qtyBtn.setAttribute('aria-label', it.name + ' 금액 ' + (label || '미입력') + ', 누르면 수정');
     }
   }
 
@@ -2782,6 +2771,11 @@ datesSorted().forEach(function (d) {
       if (el.dataset.action === 'rename-category') { renameCategory(card.dataset.categoryId, el.value, el); return; }
       if (el.dataset.action === 'set-icon') { setCategoryIcon(card.dataset.categoryId, el.value); return; }
       if (el.dataset.field && row) { updateItemField(row.dataset.itemId, el.dataset.field, el, row); }
+    });
+
+    // 금액 칸: 입력하는 대로 쉼표를 넣는다 (5000 → 5,000)
+    root.addEventListener('input', function (e) {
+      if (e.target.matches('input[data-field="price"]')) formatPriceInput(e.target);
     });
 
     // Enter in an edit field should commit and not submit anything.
