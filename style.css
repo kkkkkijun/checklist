@@ -505,6 +505,10 @@ input[type="number"] { -moz-appearance: textfield; }
 .bulk-add__hint { font-size: 0.78rem; color: var(--muted); flex: 1 1 200px; line-height: 1.4; }
 .bulk-add__actions .btn { flex-shrink: 0; }
 .add-category-form { max-width: 480px; margin: 8px 0 0; }
+.edit-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 8px 0 0; padding: 8px 10px; border: 1px dashed var(--danger, #c0392b); border-radius: 10px; background: #fff5f3; }
+.edit-bar__label { font-size: 0.82rem; font-weight: 700; color: var(--muted); margin-right: auto; }
+.edit-bar .btn[disabled] { opacity: 0.45; cursor: default; }
+@media (max-width: 480px) { .edit-bar__label { flex-basis: 100%; margin-right: 0; } .edit-bar .btn { flex: 1 1 auto; padding: 0 8px; } }
 .add-category-form input[type="text"] { min-height: 38px; }
 .add-category-form .btn { min-height: 38px; padding: 0 11px; font-size: 0.88rem; }
 

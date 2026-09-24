@@ -662,6 +662,13 @@
   }
 
   function renderCategories() {
+    var editBar = $('#edit-bar');
+    if (editBar) {
+      editBar.hidden = !ui.editMode || !state.categories.length;
+      var ccb = $('#clear-category-btn'); var ac = state.categories.length ? findCategory(activeCategoryId()) : null;
+      if (ccb) { ccb.textContent = '🗑 ' + (ac ? '‘' + ac.name + '’ 비우기' : '이 분류 비우기'); ccb.disabled = !ac || itemsOf(ac.id).length === 0; }
+      var cab = $('#clear-items-btn-2'); if (cab) cab.disabled = state.items.length === 0;
+    }
     var root = $('#categories');
     var catTabs = $('#category-tabs');
     if (searching()) {
@@ -1772,6 +1779,21 @@ datesSorted().forEach(function (d) {
     act('add', '준비물 ' + added.length + '개 추가 (' + added.slice(0, 3).join(', ') + (added.length > 3 ? ' 외' : '') + ')');
     return added.length;
   }
+  // 한 분류의 준비물만 비우기(분류는 남김). 되돌리기 가능.
+  function clearCategoryItems(id) {
+    var cat = findCategory(id); if (!cat) return false;
+    var removed = itemsOf(id);
+    if (!removed.length) { showToast('‘' + cat.name + '’에는 삭제할 준비물이 없습니다.'); return false; }
+    if (!window.confirm('‘' + cat.name + '’의 준비물 ' + removed.length + '개를 모두 삭제할까요? 분류는 남습니다.' + (window.ChecklistSync && window.ChecklistSync.getState().roomId ? '\n가족 공유 중이라 다른 기기에서도 함께 삭제됩니다.' : ''))) return false;
+    state.items = state.items.filter(function (it) { return it.categoryId !== id; });
+    ui.itemEdit = null; ui.qtyEdit = null;
+    commit();
+    act('delete', '‘' + cat.name + '’ 준비물 ' + removed.length + '개 삭제');
+    showToast('‘' + cat.name + '’ 준비물 ' + removed.length + '개를 삭제했습니다.', function () {
+      state.items = state.items.concat(removed); commit(); showToast('삭제를 취소했습니다.');
+    });
+    return true;
+  }
   // 준비물 전체 비우기(분류·일지·택일·이름은 유지). 되돌리기 가능.
   function clearAllItems(auto) {
     var removed = state.items.slice();
@@ -2427,6 +2449,10 @@ datesSorted().forEach(function (d) {
     }
     var clearItemsBtn = $('#clear-items-btn');
     if (clearItemsBtn) clearItemsBtn.addEventListener('click', function () { clearAllItems(false); });
+    var clearItemsBtn2 = $('#clear-items-btn-2');
+    if (clearItemsBtn2) clearItemsBtn2.addEventListener('click', function () { clearAllItems(false); });
+    var clearCatBtn = $('#clear-category-btn');
+    if (clearCatBtn) clearCatBtn.addEventListener('click', function () { var cid = activeCategoryId(); if (cid) clearCategoryItems(cid); });
     var resetBtn = $('#reset-btn');
     if (resetBtn) resetBtn.addEventListener('click', function () { closeMenu(); resetToDefault(); });
     $('#copy-text-btn').addEventListener('click', function () { closeMenu(); copyBackupText(); });
