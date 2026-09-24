@@ -595,6 +595,37 @@ input[type="number"] { -moz-appearance: textfield; }
 .cat-total__label { font-size: 0.78rem; font-weight: 600; color: #993c1d; min-width: 0; }
 .cat-total__sum { font-size: 1.25rem; font-weight: 800; color: #712b13; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .progress-line__text .sum, #home-progress-text .sum { font-weight: 800; color: #712b13; }
+/* 이름 태그 */
+.tag { display: inline-block; font-size: 0.7rem; font-weight: 700; line-height: 1.5; padding: 1px 7px; border-radius: 6px; margin-right: 5px; vertical-align: 2px; background: #ebe6e2; color: #5f5e5a; }
+.tag--1 { background: #e6f1fb; color: #0c447c; }
+.tag--2 { background: #fbeaf0; color: #72243e; }
+.tag--3 { background: #faeeda; color: #633806; }
+.item.is-done .tag, .item.is-excluded .tag { opacity: 0.6; }
+.tag-chips { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 8px; }
+.tag-chip { min-height: 36px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--card); color: var(--muted); font: inherit; font-size: 0.82rem; font-weight: 600; cursor: pointer; }
+.tag-chip.is-active { background: var(--peach-soft); border-color: var(--peach-strong); color: var(--peach-strong); }
+.tag-chip.tag--1 { color: #185fa5; border-color: #b5d4f4; background: #fff; } .tag-chip.tag--1.is-active { background: #e6f1fb; border-color: #378add; color: #0c447c; }
+.tag-chip.tag--2 { color: #993556; border-color: #f4c0d1; background: #fff; } .tag-chip.tag--2.is-active { background: #fbeaf0; border-color: #d4537e; color: #72243e; }
+.tag-chip.tag--3 { color: #854f0b; border-color: #fac775; background: #fff; } .tag-chip.tag--3.is-active { background: #faeeda; border-color: #ef9f27; color: #633806; }
+.tag-chip.tag--x { color: #5f5e5a; }
+.tag-chip:focus-visible, .done-tab:focus-visible { outline: 3px solid var(--focus); outline-offset: 1px; }
+/* 완료/미완료 탭 (분류별 설정) */
+.done-tabs { display: flex; gap: 4px; padding: 3px; background: #f3e8e0; border-radius: 12px; margin: 0 0 8px; }
+.done-tab { flex: 1 1 0; min-height: 38px; border: 0; border-radius: 9px; background: transparent; color: var(--muted); font: inherit; font-size: 0.85rem; font-weight: 600; cursor: pointer; }
+.done-tab b { font-weight: 500; color: #9a8a7c; margin-left: 4px; font-size: 0.78rem; }
+.done-tab.is-active { background: #fff; color: var(--peach-strong); box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
+.done-tab.is-active b { color: var(--peach-strong); }
+.cat-opt { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--text); margin-left: 4px; min-height: 36px; cursor: pointer; }
+.cat-opt input { width: 18px; height: 18px; }
+/* 편집 폼 태그 선택 */
+.field__label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 4px; }
+.tag-picks { display: flex; gap: 6px; flex-wrap: wrap; }
+.tag-pick { display: inline-flex; align-items: center; gap: 6px; min-height: 38px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--border); background: #fff; font-size: 0.88rem; font-weight: 600; cursor: pointer; color: var(--muted); }
+.tag-pick input { width: 16px; height: 16px; margin: 0; }
+.tag-pick.is-active.tag--1 { background: #e6f1fb; border-color: #378add; color: #0c447c; }
+.tag-pick.is-active.tag--2 { background: #fbeaf0; border-color: #d4537e; color: #72243e; }
+.tag-pick.is-active.tag--3 { background: #faeeda; border-color: #ef9f27; color: #633806; }
+.tag-pick.is-active.tag--x { background: var(--peach-soft); border-color: var(--peach-strong); color: var(--peach-strong); }
 .category__progress .progress-text { font-size: 0.85rem; margin-bottom: 5px; }
 .category__progress .progress-bar { height: 8px; }
 .is-collapsed .category__progress { margin-bottom: 0; }

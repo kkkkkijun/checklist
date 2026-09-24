@@ -121,9 +121,9 @@
   // Remote layout: { version, categories:{id:{name,icon,order}}, items:{id:{...,order}}, notes:{id:{...}}, highlights }
   function docFromState(s) {
     var doc = { version: s.version || 1, categories: {}, items: {}, notes: {}, highlights: s.highlights || '', picks: { gpt: (s.picks && s.picks.gpt) || '', claude: (s.picks && s.picks.claude) || '' } };
-    s.categories.forEach(function (c, i) { doc.categories[c.id] = { name: c.name, icon: c.icon || '', order: i }; });
+    s.categories.forEach(function (c, i) { doc.categories[c.id] = { name: c.name, icon: c.icon || '', doneTabs: !!c.doneTabs, order: i }; });
     s.items.forEach(function (it, i) {
-      doc.items[it.id] = { categoryId: it.categoryId, name: it.name, price: typeof it.price === 'number' ? it.price : null, memo: it.memo || '', done: !!it.done, excluded: !!it.excluded, order: i };
+      doc.items[it.id] = { categoryId: it.categoryId, name: it.name, price: typeof it.price === 'number' ? it.price : null, tags: Array.isArray(it.tags) && it.tags.length ? it.tags.slice() : null, memo: it.memo || '', done: !!it.done, excluded: !!it.excluded, order: i };
     });
     s.notes.forEach(function (n) { doc.notes[n.id] = { date: n.date || '', title: n.title || '', body: n.body || '' }; });
     doc.dates = {};
@@ -153,9 +153,9 @@
     doc = doc || {};
     return {
       version: typeof doc.version === 'number' ? doc.version : 1,
-      categories: sortedEntries(doc.categories).map(function (c) { return { id: c.id, name: c.name, icon: c.icon || '' }; }),
+      categories: sortedEntries(doc.categories).map(function (c) { return { id: c.id, name: c.name, icon: c.icon || '', doneTabs: c.doneTabs === true }; }),
       items: sortedEntries(doc.items).map(function (it) {
-        return { id: it.id, categoryId: it.categoryId, name: it.name, price: typeof it.price === 'number' ? it.price : null, memo: it.memo || '', done: it.done === true, excluded: it.excluded === true };
+        return { id: it.id, categoryId: it.categoryId, name: it.name, price: typeof it.price === 'number' ? it.price : null, tags: Array.isArray(it.tags) ? it.tags : (it.tags && typeof it.tags === 'object' ? Object.keys(it.tags).map(function (k) { return it.tags[k]; }) : []), memo: it.memo || '', done: it.done === true, excluded: it.excluded === true };
       }),
       notes: Object.keys(doc.notes || {}).map(function (id) { var n = doc.notes[id] || {}; return { id: id, date: n.date || '', title: n.title || '', body: n.body || '' }; }),
       dates: sortedEntries(doc.dates).map(function (d) { return { id: d.id, date: d.date || '', time: d.time || '', label: d.label || '', memo: d.memo || '' }; }),

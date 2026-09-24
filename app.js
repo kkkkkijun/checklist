@@ -111,6 +111,34 @@
     el.value = digits ? formatNumber(digits) : '';
   }
 
+  /* ---------- 이름 태그 (기준·윤서·축복) ---------- */
+  var TAG_NAMES = ['기준', '윤서', '축복'];
+  var TAG_MAX = 6, TAGS_PER_ITEM = 5;
+  function normalizeTags(raw) {
+    if (!Array.isArray(raw)) return [];
+    var out = [];
+    raw.forEach(function (t) {
+      if (typeof t !== 'string') return;
+      var v = t.trim().slice(0, TAG_MAX);
+      if (v && out.indexOf(v) === -1 && out.length < TAGS_PER_ITEM) out.push(v);
+    });
+    return out;
+  }
+  // "윤서, 기준 세면도구" → { tags: ['윤서','기준'], rest: '세면도구' } / "축복이 모자" → 축복
+  var TAG_PREFIX_RE = new RegExp('^((?:' + TAG_NAMES.map(function (n) { return n + '이?'; }).join('|') + ')(?:\\s*[,·/+]\\s*(?:' + TAG_NAMES.map(function (n) { return n + '이?'; }).join('|') + '))*)\\s+(.+)$');
+  function parseTagPrefix(text) {
+    var m = String(text || '').match(TAG_PREFIX_RE);
+    if (!m) return { tags: [], rest: String(text || '') };
+    var tags = normalizeTags(m[1].split(/\s*[,·/+]\s*/).map(function (t) { return t.replace(/이$/, ''); }));
+    return { tags: tags, rest: m[2].trim() };
+  }
+  function tagClass(tag) { var i = TAG_NAMES.indexOf(tag); return 'tag tag--' + (i === -1 ? 'x' : (i + 1)); }
+  function tagsHtml(it) {
+    if (!it.tags || !it.tags.length) return '';
+    return it.tags.map(function (t) { return '<span class="' + tagClass(t) + '">' + escapeHtml(t) + '</span>'; }).join('');
+  }
+  function tagLabel(it) { return it.tags && it.tags.length ? it.tags.join('+') : '공용'; }
+
   function todayStamp() {
     var d = new Date();
     var p = function (n) { return (n < 10 ? '0' : '') + n; };
@@ -132,7 +160,7 @@
     var categories = [];
     var items = [];
     DEFAULT_TEMPLATE.forEach(function (cat) {
-      categories.push({ id: uid(), name: cat.name, icon: cat.icon });
+      categories.push({ id: uid(), name: cat.name, icon: cat.icon, doneTabs: false });
     });
     return { version: DATA_VERSION, categories: categories, items: items, notes: [], highlights: '', picks: emptyPicks(), dates: [], names: [], dueDate: '', memo: '', memos: [], supports: [] };
   }
@@ -163,7 +191,7 @@
         icon = cleanIcon(c.icon);
         if (ICON_TONE_UPGRADES[icon]) { icon = ICON_TONE_UPGRADES[icon]; migrated = true; }
       }
-      categories.push({ id: cid, name: cname.slice(0, 40), icon: icon });
+      categories.push({ id: cid, name: cname.slice(0, 40), icon: icon, doneTabs: c.doneTabs === true });
     }
 
     var items = [];
@@ -190,6 +218,7 @@
         categoryId: it.categoryId,
         name: iname.slice(0, 60),
         price: price,
+        tags: normalizeTags(it.tags),
         memo: typeof it.memo === 'string' ? it.memo.trim().slice(0, 200) : '',
         done: it.done === true,
         excluded: it.excluded === true
@@ -391,7 +420,7 @@
 
   /* ---------- state ---------- */
   var state;
-  var ui = { filter: 'all', editMode: false, pendingUndo: null, undoTimer: null, collapsed: {}, noteForm: null, qtyEdit: null, highlightEdit: false, activeCategory: null, highlightsCollapsed: false, itemEdit: null, view: 'checklist', picksEdit: null, picksActive: 'gpt', dateEdit: null, nameEdit: null, search: '', searchOpen: false, stripOpen: false, onboardingDismissed: false, deviceName: '', autoName: '', toastRemote: true, lastSeenActivity: 0, activity: [], supportEdit: null, memoFocus: null, seenBase: 0, templateCleared: false, bulkOpen: null, activityExpanded: false };
+  var ui = { filter: 'all', editMode: false, pendingUndo: null, undoTimer: null, collapsed: {}, noteForm: null, qtyEdit: null, highlightEdit: false, activeCategory: null, highlightsCollapsed: false, itemEdit: null, view: 'checklist', picksEdit: null, picksActive: 'gpt', dateEdit: null, nameEdit: null, search: '', searchOpen: false, stripOpen: false, onboardingDismissed: false, deviceName: '', autoName: '', toastRemote: true, lastSeenActivity: 0, activity: [], supportEdit: null, memoFocus: null, seenBase: 0, templateCleared: false, bulkOpen: null, activityExpanded: false, doneTab: {}, tagFilter: {}, tagsMigrated: false };
 
   // Active tab (narrow screens): falls back to the first category when the saved one is gone.
   function activeCategoryId() {
@@ -431,6 +460,9 @@
         if (typeof parsed.autoName === 'string') ui.autoName = parsed.autoName.slice(0, 12);
         ui.templateCleared = parsed.templateCleared === true;
         ui.activityExpanded = parsed.activityExpanded === true;
+        ui.tagsMigrated = parsed.tagsMigrated === true;
+        if (parsed.doneTab && typeof parsed.doneTab === 'object') ui.doneTab = parsed.doneTab;
+        if (parsed.tagFilter && typeof parsed.tagFilter === 'object') ui.tagFilter = parsed.tagFilter;
         if (parsed.toastRemote === false) ui.toastRemote = false;
         if (typeof parsed.lastSeenActivity === 'number') ui.lastSeenActivity = parsed.lastSeenActivity;
         if (parsed.picksActive === 'gpt' || parsed.picksActive === 'claude') ui.picksActive = parsed.picksActive;
@@ -453,6 +485,9 @@
         autoName: ui.autoName,
         templateCleared: ui.templateCleared,
         activityExpanded: ui.activityExpanded,
+        tagsMigrated: ui.tagsMigrated,
+        doneTab: ui.doneTab,
+        tagFilter: ui.tagFilter,
         toastRemote: ui.toastRemote,
         lastSeenActivity: ui.lastSeenActivity,
         highlightsCollapsed: ui.highlightsCollapsed
@@ -527,6 +562,26 @@
     }).map(function (x) { return x.it; });
   }
 
+  function doneTabOf(catId) { var v = ui.doneTab[catId]; return v === 'todo' || v === 'done' ? v : 'all'; }
+  function tagFilterOf(catId) { return typeof ui.tagFilter[catId] === 'string' ? ui.tagFilter[catId] : ''; }
+  function matchesCategoryView(cat, it) {
+    if (ui.editMode) return true;
+    if (cat.doneTabs) {
+      var dt = doneTabOf(cat.id);
+      if (dt === 'todo' && (it.done || it.excluded)) return false;
+      if (dt === 'done' && (!it.done || it.excluded)) return false;
+    }
+    var tf = tagFilterOf(cat.id);
+    if (tf && (!it.tags || it.tags.indexOf(tf) === -1)) return false;
+    return true;
+  }
+  function tagCounts(items) {
+    var counts = {}; var order = [];
+    items.forEach(function (it) { (it.tags || []).forEach(function (t) { if (!counts[t]) { counts[t] = 0; order.push(t); } counts[t]++; }); });
+    order.sort(function (a, b) { var ia = TAG_NAMES.indexOf(a), ib = TAG_NAMES.indexOf(b); if (ia === -1) ia = 99; if (ib === -1) ib = 99; return ia - ib || a.localeCompare(b); });
+    return { counts: counts, order: order };
+  }
+
   function matchesFilter(it) {
     switch (ui.filter) {
       case 'todo': return !it.excluded && !it.done;
@@ -538,6 +593,7 @@
 
   function emptyMessage(catItems) {
     if (catItems.length === 0) return '아직 준비물이 없습니다. 위 칸에 이름을 적고 추가를 누르세요. 한 번에 여러 개를 넣으려면 ‘여러 개’를 누르세요.';
+    if (!ui.editMode) { var c0 = findCategory(catItems[0].categoryId); if (c0 && (tagFilterOf(c0.id) || (c0.doneTabs && doneTabOf(c0.id) !== 'all'))) return '이 조건에 맞는 준비물이 없습니다. 위의 탭이나 이름 칩을 ‘전체’로 바꿔 보세요.'; }
     switch (ui.filter) {
       case 'todo': return '미완료 항목이 없습니다. 이 분류는 준비를 마쳤어요.';
       case 'done': return '아직 완료한 항목이 없습니다.';
@@ -683,7 +739,7 @@
     var matches = [];
     state.categories.forEach(function (cat) {
       itemsOf(cat.id).forEach(function (it) {
-        if (it.name.toLowerCase().indexOf(needle) !== -1 && matchesFilter(it)) matches.push({ it: it, cat: cat });
+        if ((it.name.toLowerCase().indexOf(needle) !== -1 || (it.tags || []).some(function (t) { return t.toLowerCase().indexOf(needle) !== -1; })) && matchesFilter(it)) matches.push({ it: it, cat: cat });
       });
     });
     var html = '<div class="search-results">';
@@ -698,7 +754,7 @@
         if (it.price !== null) meta.push('금액 ' + formatWon(it.price));
         var h = '<li class="' + cls + '" data-item-id="' + escapeHtml(it.id) + '"><div class="item__row"><label class="item__check">';
         h += '<input type="checkbox" data-action="toggle-done"' + (it.done ? ' checked' : '') + (it.excluded ? ' disabled' : '') + ' aria-label="' + escapeHtml(it.name) + ' 가방에 담기 완료">';
-        h += '<span class="item__body"><span class="item__name">' + escapeHtml(it.name) + '</span>';
+        h += '<span class="item__body"><span class="item__name">' + tagsHtml(it) + escapeHtml(it.name) + '</span>';
         h += '<span class="badge badge--cat">' + (m.cat.icon ? escapeHtml(m.cat.icon) + ' ' : '') + escapeHtml(m.cat.name) + '</span>';
         if (it.excluded) h += '<span class="badge badge--excluded">제외</span>';
         else if (it.done) h += '<span class="badge badge--done">완료</span>';
@@ -755,7 +811,7 @@
     var catItems = itemsOf(cat.id);
     var p = computeProgress(catItems);
     // 보기 모드는 항상 금액 높은순(미입력은 맨 아래), 편집 모드는 ▲▼로 정한 기본 순서
-    var visible = sortItems(catItems.filter(matchesFilter), ui.editMode ? 'default' : 'price-desc');
+    var visible = sortItems(catItems.filter(matchesFilter).filter(function (it) { return matchesCategoryView(cat, it); }), ui.editMode ? 'default' : 'price-desc');
     var titleId = 'cat-title-' + cat.id;
     var collapsed = !ui.editMode && !!ui.collapsed[cat.id];
     var bodyId = 'cat-body-' + cat.id;
@@ -778,6 +834,7 @@
         html += '<button type="button" class="icon-presets__btn' + (cat.icon === ic ? ' is-active' : '') + '" data-action="pick-icon" data-icon="' + escapeHtml(ic) + '" aria-label="아이콘 ' + escapeHtml(ic) + '" aria-pressed="' + (cat.icon === ic ? 'true' : 'false') + '">' + escapeHtml(ic) + '</button>';
       });
       html += '<button type="button" class="icon-presets__btn icon-presets__btn--none' + (!cat.icon ? ' is-active' : '') + '" data-action="pick-icon" data-icon="" aria-pressed="' + (!cat.icon ? 'true' : 'false') + '">없음</button>';
+      html += '<label class="cat-opt"><input type="checkbox" data-action="toggle-done-tabs" data-focus-key="cat-dt:' + escapeHtml(cat.id) + '"' + (cat.doneTabs ? ' checked' : '') + '> 완료/미완료 탭 표시</label>';
     } else {
       html += '<h2 id="' + titleId + '" class="category__title">';
       html += '<button type="button" class="category__toggle" data-action="toggle-collapse" data-focus-key="cat-toggle:' + escapeHtml(cat.id) + '" aria-expanded="' + (collapsed ? 'false' : 'true') + '" aria-controls="' + bodyId + '">';
@@ -797,17 +854,41 @@
     }
 
     html += '<div class="category__body" id="' + bodyId + '"' + (collapsed ? ' hidden' : '') + '>';
+    if (!ui.editMode && catItems.length) {
+      if (cat.doneTabs) {
+        var dt = doneTabOf(cat.id);
+        var nAll = catItems.filter(function (it) { return !it.excluded; }).length;
+        var nDone = catItems.filter(function (it) { return !it.excluded && it.done; }).length;
+        html += '<div class="done-tabs" role="tablist" aria-label="' + escapeHtml(cat.name) + ' 완료 여부">';
+        [['all', '전체', nAll], ['todo', '미완료', nAll - nDone], ['done', '완료', nDone]].forEach(function (o) {
+          var on = dt === o[0];
+          html += '<button type="button" role="tab" class="done-tab' + (on ? ' is-active' : '') + '" data-action="done-tab" data-tab="' + o[0] + '" data-focus-key="dt:' + escapeHtml(cat.id) + ':' + o[0] + '" aria-selected="' + (on ? 'true' : 'false') + '">' + o[1] + '<b>' + o[2] + '</b></button>';
+        });
+        html += '</div>';
+      }
+      var tc = tagCounts(catItems);
+      if (tc.order.length) {
+        var tf = tagFilterOf(cat.id);
+        html += '<div class="tag-chips" role="group" aria-label="' + escapeHtml(cat.name) + ' 이름별 보기">';
+        html += '<button type="button" class="tag-chip' + (!tf ? ' is-active' : '') + '" data-action="tag-filter" data-tag="" data-focus-key="tf:' + escapeHtml(cat.id) + ':" aria-pressed="' + (!tf ? 'true' : 'false') + '">전체 ' + catItems.length + '</button>';
+        tc.order.forEach(function (t) {
+          var on = tf === t;
+          html += '<button type="button" class="tag-chip ' + tagClass(t) + (on ? ' is-active' : '') + '" data-action="tag-filter" data-tag="' + escapeHtml(t) + '" data-focus-key="tf:' + escapeHtml(cat.id) + ':' + escapeHtml(t) + '" aria-pressed="' + (on ? 'true' : 'false') + '">' + escapeHtml(t) + ' ' + tc.counts[t] + '</button>';
+        });
+        html += '</div>';
+      }
+    }
     var bulkOpen = ui.bulkOpen === cat.id;
     html += '<form class="inline-form quick-add" data-action="add-item">';
     html += '<label class="visually-hidden" for="new-item-' + escapeHtml(cat.id) + '">' + escapeHtml(cat.name) + '에 추가할 준비물</label>';
-    html += '<input type="text" id="new-item-' + escapeHtml(cat.id) + '" data-focus-key="new-item:' + escapeHtml(cat.id) + '" placeholder="준비물 이름 (예: 수유 패드 5,000원)" maxlength="80" autocomplete="off" enterkeyhint="done">';
+    html += '<input type="text" id="new-item-' + escapeHtml(cat.id) + '" data-focus-key="new-item:' + escapeHtml(cat.id) + '" placeholder="준비물 (예: 윤서 수유 패드 5,000원)" maxlength="80" autocomplete="off" enterkeyhint="done">';
     html += '<button type="submit" class="btn btn--primary">추가</button>';
     html += '<button type="button" class="btn quick-add__bulk' + (bulkOpen ? ' is-active' : '') + '" data-action="bulk-toggle" data-focus-key="bulk-toggle:' + escapeHtml(cat.id) + '" aria-expanded="' + (bulkOpen ? 'true' : 'false') + '" aria-controls="bulk-' + escapeHtml(cat.id) + '">여러 개</button>';
     html += '</form>';
     html += '<form class="bulk-add" id="bulk-' + escapeHtml(cat.id) + '" data-action="bulk-add"' + (bulkOpen ? '' : ' hidden') + '>';
     html += '<label class="visually-hidden" for="bulk-text-' + escapeHtml(cat.id) + '">한 줄에 하나씩 준비물 입력</label>';
     html += '<textarea id="bulk-text-' + escapeHtml(cat.id) + '" data-focus-key="bulk-text:' + escapeHtml(cat.id) + '" rows="6" placeholder="한 줄에 하나씩 적으세요&#10;수유 패드 5,000원&#10;산모 수첩&#10;물티슈 12000"></textarea>';
-    html += '<div class="bulk-add__actions"><span class="bulk-add__hint">이름 뒤에 금액을 적으면 함께 저장됩니다(예: 물티슈 12000, 젖병 1.5만원). 메모장·카톡에서 복사한 목록을 그대로 붙여넣어도 됩니다.</span>';
+    html += '<div class="bulk-add__actions"><span class="bulk-add__hint">앞에 이름(기준·윤서·축복)을 붙이면 태그로, 뒤에 금액을 적으면 금액으로 저장됩니다(예: 윤서 물티슈 12000, 축복 젖병 1.5만원). 메모장·카톡에서 복사한 목록을 그대로 붙여넣어도 됩니다.</span>';
     html += '<button type="submit" class="btn btn--primary btn--small">모두 추가</button></div>';
     html += '</form>';
     if (visible.length === 0) {
@@ -836,7 +917,7 @@
     html += '<label class="item__check">';
     html += '<input type="checkbox" data-action="toggle-done" data-focus-key="check:' + id + '"' + (it.done ? ' checked' : '') + (it.excluded ? ' disabled' : '') + ' aria-label="' + escapeHtml(it.name) + ' 가방에 담기 완료">';
     html += '<span class="item__body">';
-    html += '<span class="item__name">' + escapeHtml(it.name) + '</span>';
+    html += '<span class="item__name">' + tagsHtml(it) + escapeHtml(it.name) + '</span>';
     if (it.excluded) html += '<span class="badge badge--excluded">제외</span>';
     else if (it.done) html += '<span class="badge badge--done">완료</span>';
     if (it.memo) html += '<span class="item__memo">' + escapeHtml(it.memo) + '</span>';
@@ -869,7 +950,7 @@
       // Compact row: keeps edit mode short on phones; one item expands at a time.
       var c = 'item item--edit-compact' + (it.done ? ' is-done' : '') + (it.excluded ? ' is-excluded' : '');
       var h = '<li class="' + c + '" data-item-id="' + id + '"><div class="item__edit-row">';
-      h += '<span class="item__body"><span class="item__name">' + escapeHtml(it.name) + '</span>' + badges;
+      h += '<span class="item__body"><span class="item__name">' + tagsHtml(it) + escapeHtml(it.name) + '</span>' + badges;
       if (it.memo) h += '<span class="item__memo">' + escapeHtml(it.memo) + '</span>';
       h += '</span>';
       var siblings = itemsOf(it.categoryId);
@@ -891,6 +972,13 @@
 
     html += '<div class="field"><label for="qty-' + id + '">금액</label>' + priceFieldHtml(it, id, 'qty:' + id) + '</div>';
 
+    var tagOptions = TAG_NAMES.slice(); (it.tags || []).forEach(function (t) { if (tagOptions.indexOf(t) === -1) tagOptions.push(t); });
+    html += '<div class="field"><span class="field__label">누구 것 (여러 명 선택 가능)</span><div class="tag-picks">';
+    tagOptions.forEach(function (t) {
+      var on = (it.tags || []).indexOf(t) !== -1;
+      html += '<label class="tag-pick ' + tagClass(t) + (on ? ' is-active' : '') + '"><input type="checkbox" data-field="tag" data-tag="' + escapeHtml(t) + '" data-focus-key="tag:' + id + ':' + escapeHtml(t) + '"' + (on ? ' checked' : '') + '> ' + escapeHtml(t) + '</label>';
+    });
+    html += '</div></div>';
     html += '<div class="field"><label for="memo-' + id + '">메모 (선택)</label>';
     html += '<input type="text" id="memo-' + id + '" data-field="memo" data-focus-key="memo:' + id + '" value="' + escapeHtml(it.memo) + '" maxlength="200" placeholder="예: 출발 직전에 챙기기, 병원 제공, 보호자 담당"></div>';
 
@@ -1792,22 +1880,23 @@ datesSorted().forEach(function (d) {
     var t = String(line || '').replace(/^[\s\-•·*\d]*[.)]?\s*(?=\S)/, '').trim();
     t = t.replace(/^[-•·*]\s*/, '').trim();
     if (!t) return null;
+    var tp = parseTagPrefix(t); t = tp.rest; if (!t) return null;
     // 끝에 붙은 금액: "5,000", "5000원", "5천원", "1.5만원"
     var m = t.match(/^(.+?)[\s:]+((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?\s*(?:만|천)?\s*원?)$/);
     if (m && m[1].trim()) {
       var pp = parsePrice(m[2]);
-      if (pp.ok) return { name: m[1].trim().slice(0, 60), price: pp.value };
+      if (pp.ok) return { name: m[1].trim().slice(0, 60), price: pp.value, tags: tp.tags };
     }
-    return { name: t.slice(0, 60), price: null };
+    return { name: t.slice(0, 60), price: null, tags: tp.tags };
   }
   function addItem(categoryId, text) {
     var p = parseItemLine(text);
     if (!p) { showToast('준비물 이름을 입력하세요.'); return false; }
     if (!findCategory(categoryId)) return false;
-    state.items.push({ id: uid(), categoryId: categoryId, name: p.name, price: p.price, memo: '', done: false, excluded: false });
+    state.items.push({ id: uid(), categoryId: categoryId, name: p.name, price: p.price, tags: p.tags || [], memo: '', done: false, excluded: false });
     commit();
-    act('add', '‘' + p.name + '’ 추가');
-    showToast('‘' + p.name + '’ 추가' + (p.price !== null ? ' · ' + formatWon(p.price) : ''));
+    act('add', '‘' + p.name + '’ 추가' + (p.tags && p.tags.length ? ' (' + p.tags.join('+') + ')' : ''));
+    showToast('‘' + p.name + '’ 추가' + (p.tags && p.tags.length ? ' · ' + p.tags.join('+') : '') + (p.price !== null ? ' · ' + formatWon(p.price) : ''));
     return true;
   }
   function addItems(categoryId, text) {
@@ -1815,7 +1904,7 @@ datesSorted().forEach(function (d) {
     var added = [];
     String(text || '').split(/\r?\n/).forEach(function (line) {
       var p = parseItemLine(line); if (!p) return;
-      state.items.push({ id: uid(), categoryId: categoryId, name: p.name, price: p.price, memo: '', done: false, excluded: false });
+      state.items.push({ id: uid(), categoryId: categoryId, name: p.name, price: p.price, tags: p.tags || [], memo: '', done: false, excluded: false });
       added.push(p.name);
     });
     if (!added.length) { showToast('추가할 준비물이 없습니다. 한 줄에 하나씩 적어 주세요.'); return 0; }
@@ -1867,6 +1956,33 @@ datesSorted().forEach(function (d) {
       if (!TEMPLATE_NAMES[it.name] || it.done || it.excluded || it.price !== null || it.memo) return false;
     }
     return true;
+  }
+  // 예전 방식("윤서 슬리퍼", "윤서, 기준 마스크")으로 적힌 준비물을 한 번 태그로 분류하고,
+  // '축복이 맞이 물품' 분류에 완료/미완료 탭을 켠다. 되돌리기 가능.
+  function migrateTagsOnce() {
+    if (ui.tagsMigrated) return;
+    ui.tagsMigrated = true; saveUiPrefs();
+    var changed = [];
+    state.items.forEach(function (it) {
+      if (it.tags && it.tags.length) return;
+      var tp = parseTagPrefix(it.name);
+      if (!tp.tags.length || !tp.rest) return;
+      changed.push({ it: it, name: it.name, tags: it.tags.slice() });
+      it.name = tp.rest.slice(0, 60); it.tags = tp.tags;
+    });
+    var catChanged = [];
+    if (!state.categories.some(function (c) { return c.doneTabs; })) {
+      state.categories.forEach(function (c) { if (/맞이\s*물품/.test(c.name)) { catChanged.push(c); c.doneTabs = true; } });
+    }
+    if (!changed.length && !catChanged.length) return;
+    commit();
+    if (changed.length) act('edit', '이름 태그 자동 분류 ' + changed.length + '개');
+    var msg = (changed.length ? '준비물 ' + changed.length + '개의 이름을 태그(기준·윤서·축복)로 분류했습니다.' : '') + (catChanged.length ? ' ‘' + catChanged[0].name + '’에 완료/미완료 탭을 켰습니다.' : '');
+    showToast(msg.trim(), function () {
+      changed.forEach(function (c) { c.it.name = c.name; c.it.tags = c.tags; });
+      catChanged.forEach(function (c) { c.doneTabs = false; });
+      commit(); showToast('자동 분류를 되돌렸습니다.');
+    });
   }
   function clearTemplateItemsOnce() {
     if (ui.templateCleared) return;
@@ -1987,6 +2103,16 @@ datesSorted().forEach(function (d) {
       case 'memo':
         it.memo = inputEl.value.trim().slice(0, 200);
         break;
+      case 'tag': {
+        var tg = inputEl.dataset.tag;
+        var cur = (it.tags || []).slice();
+        if (inputEl.checked && cur.indexOf(tg) === -1) cur.push(tg);
+        if (!inputEl.checked) cur = cur.filter(function (x) { return x !== tg; });
+        it.tags = normalizeTags(cur);
+        var lab = inputEl.closest('.tag-pick'); if (lab) lab.classList.toggle('is-active', inputEl.checked);
+        setError('');
+        break;
+      }
       default:
         return;
     }
@@ -1995,6 +2121,7 @@ datesSorted().forEach(function (d) {
     if (field === 'name') act('edit', '‘' + it.name + '’ 이름 수정');
     else if (field === 'price') act('edit', '‘' + it.name + '’ 금액 ' + (qtyLabel(it) || '미입력') + '로 변경');
     else if (field === 'memo') act('edit', '‘' + it.name + '’ 메모 수정');
+    else if (field === 'tag') act('edit', '‘' + it.name + '’ 태그 ' + tagLabel(it) + '(으)로 변경');
     var qtyBtn = $('.item__qty', rowEl);
     if (qtyBtn) {
       var label = qtyLabel(it);
@@ -2145,7 +2272,7 @@ datesSorted().forEach(function (d) {
       applyingRemote = false;
     }
     // 방 참여 직후에는 구독(attach)이 applyRemote 뒤에 붙으므로, 비우기(=변경 전파)는 한 틱 뒤에 실행한다.
-    setTimeout(clearTemplateItemsOnce, 0);
+    setTimeout(function () { clearTemplateItemsOnce(); migrateTagsOnce(); }, 0);
     return true;
   }
 
@@ -2721,6 +2848,20 @@ datesSorted().forEach(function (d) {
       var row = btn.closest('[data-item-id]');
       switch (btn.dataset.action) {
         case 'delete-category': deleteCategory(card.dataset.categoryId); break;
+        case 'done-tab': {
+          var dcid = card.dataset.categoryId;
+          ui.doneTab[dcid] = btn.dataset.tab; saveUiPrefs();
+          renderCategories();
+          var db = document.querySelector('[data-focus-key="dt:' + dcid + ':' + btn.dataset.tab + '"]'); if (db) db.focus();
+          break;
+        }
+        case 'tag-filter': {
+          var tcid = card.dataset.categoryId;
+          ui.tagFilter[tcid] = btn.dataset.tag || ''; saveUiPrefs();
+          renderCategories();
+          var tb = document.querySelector('[data-focus-key="tf:' + tcid + ':' + (btn.dataset.tag || '') + '"]'); if (tb) tb.focus();
+          break;
+        }
         case 'bulk-toggle': {
           var bcid = card.dataset.categoryId;
           ui.bulkOpen = ui.bulkOpen === bcid ? null : bcid;
@@ -2812,6 +2953,7 @@ datesSorted().forEach(function (d) {
       if (el.dataset.action === 'move-item') { moveItem(row.dataset.itemId, el.value); return; }
       if (el.dataset.action === 'rename-category') { renameCategory(card.dataset.categoryId, el.value, el); return; }
       if (el.dataset.action === 'set-icon') { setCategoryIcon(card.dataset.categoryId, el.value); return; }
+      if (el.dataset.action === 'toggle-done-tabs') { var dcat = findCategory(card.dataset.categoryId); if (dcat) { dcat.doneTabs = !!el.checked; saveState(); act('category', '분류 ‘' + dcat.name + '’ 완료 탭 ' + (dcat.doneTabs ? '켬' : '끔')); } return; }
       if (el.dataset.field && row) { updateItemField(row.dataset.itemId, el.dataset.field, el, row); }
     });
 
@@ -2856,7 +2998,7 @@ datesSorted().forEach(function (d) {
     render();
     var storedRoom = null;
     try { storedRoom = window.localStorage.getItem('birth-bag-checklist:room'); } catch (e) { /* ignore */ }
-    if (!storedRoom && !/[?&]room=/.test(window.location.search)) clearTemplateItemsOnce();
+    if (!storedRoom && !/[?&]room=/.test(window.location.search)) { clearTemplateItemsOnce(); migrateTagsOnce(); }
     // sync.js is loaded after app.js; bind once it has had a chance to run.
     window.addEventListener('load', bindShareEvents);
   }
