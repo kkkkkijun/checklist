@@ -15,7 +15,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="마미백">
   <meta name="mobile-web-app-capable" content="yes">
-  <link rel="stylesheet" href="./style.css?v=20260925c">
+  <link rel="stylesheet" href="./style.css?v=20260925d">
 </head>
 <body>
   <a class="skip-link" href="#main-area">본문으로 건너뛰기</a>
@@ -65,17 +65,6 @@
       </div>
       <ul class="home-cats" id="home-cats"></ul>
       <button type="button" class="btn btn--primary home-card__cta" data-action="go-checklist">준비물 체크하러 가기</button>
-    </section>
-
-    <section class="home-card" id="activity-card" aria-labelledby="activity-title">
-      <div class="progress-head">
-        <h2 id="activity-title" class="home-card__title">🔔 최근 변경</h2>
-        <div class="settings-actions">
-          <button type="button" class="btn btn--small" id="activity-clear" hidden>모두 읽음</button>
-          <button type="button" class="btn btn--small activity-toggle" id="activity-toggle" aria-expanded="false" aria-controls="activity-list" hidden>펼치기</button>
-        </div>
-      </div>
-      <ul class="activity-list" id="activity-list"></ul>
     </section>
 
     <section class="home-card" id="memo-card" aria-labelledby="memo-title">
@@ -234,7 +223,7 @@
 
     <section class="settings-card" aria-labelledby="set-alert-title">
       <h3 id="set-alert-title" class="settings-card__title">🔔 알림</h3>
-      <p class="settings-card__text">가족이 준비물·일지·택일·작명을 바꾸면 홈의 <strong>최근 변경</strong>에 기록되고, 읽지 않은 변경 수가 홈 탭에 표시됩니다. 앱이 열려 있으면 바로 알림 문구가 뜹니다.</p>
+      <p class="settings-card__text">가족이 준비물·일지·택일·작명을 바꾸면 앱을 보는 중에 바로 알림 문구가 뜹니다.</p>
       <label class="chk"><input type="checkbox" id="toast-remote"> 앱을 보는 중에 가족의 변경을 문구로 알려주기</label>
     </section>
 
@@ -275,7 +264,6 @@
     <button type="button" class="primary-tab is-active" data-view="home" role="tab" aria-selected="true" aria-controls="view-home" id="ptab-home">
       <span class="primary-tab__icon" aria-hidden="true">🏠</span>
       <span class="primary-tab__label">홈</span>
-      <span class="primary-tab__count primary-tab__count--alert" id="ptab-home-count"></span>
     </button>
     <button type="button" class="primary-tab" data-view="checklist" role="tab" aria-selected="false" aria-controls="view-checklist" id="ptab-checklist" tabindex="-1">
       <span class="primary-tab__icon" aria-hidden="true">🧳</span>
@@ -309,9 +297,9 @@
     <button type="button" class="toast__close" id="toast-close" aria-label="알림 닫기">×</button>
   </div>
 
-  <script src="./firebase-config.js?v=20260925c"></script>
-  <script src="./app.js?v=20260925c"></script>
-  <script src="./sync.js?v=20260925c"></script>
+  <script src="./firebase-config.js?v=20260925d"></script>
+  <script src="./app.js?v=20260925d"></script>
+  <script src="./sync.js?v=20260925d"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function () {
