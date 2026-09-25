@@ -105,10 +105,23 @@
   }
   function formatNumber(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
   function formatWon(n) { return n === null || n === undefined ? '' : formatNumber(n) + '원'; }
-  // 입력 중 쉼표 자동 삽입 (커서는 끝으로)
+  // 입력 중 쉼표 자동 삽입. 값이 바뀔 때만 다시 쓰고, 커서는 같은 숫자 개수 뒤에 둔다
+  // (매번 값을 덮어쓰고 커서를 끝으로 보내면 모바일 키보드가 입력 위치를 잃어 숫자가 사라지거나 0만 남는다)
   function formatPriceInput(el) {
-    var digits = el.value.replace(/[^\d]/g, '').replace(/^0+(?=\d)/, '').slice(0, 9);
-    el.value = digits ? formatNumber(digits) : '';
+    var before = el.value;
+    var caret = typeof el.selectionStart === 'number' ? el.selectionStart : before.length;
+    var digitsLeft = before.slice(0, caret).replace(/[^\d]/g, '').length;
+    var all = before.replace(/[^\d]/g, '');
+    var trimmed = all.replace(/^0+(?=\d)/, '');
+    digitsLeft = Math.max(0, digitsLeft - (all.length - trimmed.length));
+    var digits = trimmed.slice(0, 9);
+    var next = digits ? formatNumber(digits) : '';
+    if (next === before) return;
+    el.value = next;
+    if (document.activeElement !== el || !el.setSelectionRange) return;
+    var pos = 0, seen = 0;
+    while (pos < next.length && seen < digitsLeft) { if (/\d/.test(next.charAt(pos))) seen++; pos++; }
+    try { el.setSelectionRange(pos, pos); } catch (e) { /* ignore */ }
   }
 
   /* ---------- 이름 태그 (기준·윤서·축복) ---------- */
@@ -2131,6 +2144,15 @@ datesSorted().forEach(function (d) {
     }
   }
 
+  // 금액 칸에 커서가 있는 채로 '완료' 등을 누르면 change 이벤트보다 render()가 먼저 칸을 지워
+  // 입력한 금액이 사라진다(아이폰은 버튼을 눌러도 칸에서 포커스가 빠지지 않음). 다시 그리기 전에 먼저 반영한다.
+  function flushPriceInputs() {
+    Array.prototype.forEach.call(document.querySelectorAll('#categories input[data-field="price"]'), function (inp) {
+      var r = inp.closest('[data-item-id]');
+      if (r) updateItemField(r.dataset.itemId, 'price', inp, r);
+    });
+  }
+
   /* ---------- backup ---------- */
   function backupPayload(pretty) {
     return JSON.stringify({
@@ -2846,6 +2868,7 @@ datesSorted().forEach(function (d) {
       if (!btn || btn.tagName !== 'BUTTON') return;
       var card = btn.closest('[data-category-id]');
       var row = btn.closest('[data-item-id]');
+      flushPriceInputs();
       switch (btn.dataset.action) {
         case 'delete-category': deleteCategory(card.dataset.categoryId); break;
         case 'done-tab': {
@@ -2958,7 +2981,12 @@ datesSorted().forEach(function (d) {
     });
 
     // 금액 칸: 입력하는 대로 쉼표를 넣는다 (5000 → 5,000)
+    // 키보드가 글자를 조합 중일 때(삼성 키보드 등) 값을 바꾸면 입력이 꼬이므로 조합이 끝난 뒤에 넣는다.
     root.addEventListener('input', function (e) {
+      if (e.isComposing) return;
+      if (e.target.matches('input[data-field="price"]')) formatPriceInput(e.target);
+    });
+    root.addEventListener('compositionend', function (e) {
       if (e.target.matches('input[data-field="price"]')) formatPriceInput(e.target);
     });
 
