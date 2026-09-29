@@ -595,6 +595,27 @@ input[type="number"] { -moz-appearance: textfield; }
 .cat-total__label { font-size: 0.78rem; font-weight: 600; color: #993c1d; min-width: 0; }
 .cat-total__sum { font-size: 1.25rem; font-weight: 800; color: #712b13; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .progress-line__text .sum, #home-progress-text .sum { font-weight: 800; color: #712b13; }
+/* 상세 분류 탭 */
+.sub-tabs { display: flex; gap: 6px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; margin: 0 -2px 8px; padding: 2px; }
+.sub-tabs::-webkit-scrollbar { display: none; }
+.sub-tab { flex: 0 0 auto; min-height: 40px; padding: 0 13px; border-radius: 999px; border: 1px solid var(--border); background: var(--card); color: var(--text); font: inherit; font-size: 0.86rem; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.sub-tab b { margin-left: 5px; font-weight: 600; color: #9a8a7c; }
+.sub-tab.is-active { background: var(--peach-soft); border-color: var(--peach-strong); color: var(--peach-strong); }
+.sub-tab.is-active b { color: var(--peach-strong); }
+.sub-tab:focus-visible { outline: 3px solid var(--focus); outline-offset: 1px; }
+.sub-group { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 12px 6px 4px; margin-top: 4px; border-top: 1px solid var(--border); }
+.sub-group__name { font-size: 0.82rem; font-weight: 700; color: var(--peach-strong); }
+.sub-group__meta { font-size: 0.76rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.items-colhead + .sub-group { border-top: 0; margin-top: 0; padding-top: 4px; }
+.item__sub { display: block; font-size: 0.7rem; font-weight: 600; color: #9a8a7c; margin-bottom: 1px; }
+.subs-manager { border: 1px dashed var(--border); border-radius: 10px; padding: 10px; margin: 0 0 10px; background: #fffdfb; display: grid; gap: 6px; }
+.subs-manager__title { margin: 0; font-size: 0.85rem; font-weight: 700; }
+.subs-manager__title small { font-weight: 500; color: var(--muted); }
+.subs-row { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto auto; gap: 6px; align-items: center; }
+.subs-row input { min-height: 40px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 8px; background: #fff; min-width: 0; }
+.subs-row__icon { text-align: center; }
+.subs-row__count { font-size: 0.78rem; color: var(--muted); white-space: nowrap; }
+.subs-add { margin-top: 2px; }
 /* 이름 태그 */
 .tag { display: inline-block; font-size: 0.7rem; font-weight: 700; line-height: 1.5; padding: 1px 7px; border-radius: 6px; margin-right: 5px; vertical-align: 2px; background: #ebe6e2; color: #5f5e5a; }
 .tag--1 { background: #e6f1fb; color: #0c447c; }

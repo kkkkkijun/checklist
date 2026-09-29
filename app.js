@@ -111,6 +111,38 @@
     el.value = digits ? formatNumber(digits) : '';
   }
 
+  /* ---------- 상세 분류 (분류 안의 하위 탭) ---------- */
+  var SUB_MAX = 12, SUB_NAME_MAX = 20;
+  function normalizeSubs(raw) {
+    var list = Array.isArray(raw) ? raw : (raw && typeof raw === 'object' ? Object.keys(raw).map(function (k) { return raw[k]; }) : []);
+    var out = [], seen = {};
+    list.forEach(function (x) {
+      if (!x || typeof x !== 'object') return;
+      var id = typeof x.id === 'string' ? x.id.trim().slice(0, 60) : '';
+      var name = typeof x.name === 'string' ? x.name.trim().slice(0, SUB_NAME_MAX) : '';
+      if (!id || !name || seen[id] || out.length >= SUB_MAX) return;
+      seen[id] = true;
+      out.push({ id: id, name: name, icon: typeof x.icon === 'string' ? cleanIcon(x.icon) : '' });
+    });
+    return out;
+  }
+  function subsOf(cat) { return (cat && cat.subs) || []; }
+  function findSub(cat, id) { var l = subsOf(cat); for (var i = 0; i < l.length; i++) if (l[i].id === id) return l[i]; return null; }
+  function subTabOf(cat) {
+    var v = ui.subTab[cat.id];
+    if (v === '__none') return v;
+    return v && findSub(cat, v) ? v : '';
+  }
+  function hasSub(cat, it) { return !!(it.sub && findSub(cat, it.sub)); }
+  function inSubScope(cat, it) {
+    if (ui.editMode || !subsOf(cat).length) return true;
+    var st = subTabOf(cat);
+    if (!st) return true;
+    if (st === '__none') return !hasSub(cat, it);
+    return it.sub === st;
+  }
+  function subLabel(sub) { return (sub.icon ? sub.icon + ' ' : '') + sub.name; }
+
   /* ---------- 이름 태그 (기준·윤서·축복) ---------- */
   var TAG_NAMES = ['기준', '윤서', '축복'];
   var TAG_MAX = 6, TAGS_PER_ITEM = 5;
@@ -160,7 +192,7 @@
     var categories = [];
     var items = [];
     DEFAULT_TEMPLATE.forEach(function (cat) {
-      categories.push({ id: uid(), name: cat.name, icon: cat.icon, doneTabs: false });
+      categories.push({ id: uid(), name: cat.name, icon: cat.icon, doneTabs: false, subs: [] });
     });
     return { version: DATA_VERSION, categories: categories, items: items, notes: [], highlights: '', picks: emptyPicks(), dates: [], names: [], dueDate: '', memo: '', memos: [], supports: [] };
   }
@@ -191,7 +223,7 @@
         icon = cleanIcon(c.icon);
         if (ICON_TONE_UPGRADES[icon]) { icon = ICON_TONE_UPGRADES[icon]; migrated = true; }
       }
-      categories.push({ id: cid, name: cname.slice(0, 40), icon: icon, doneTabs: c.doneTabs === true });
+      categories.push({ id: cid, name: cname.slice(0, 40), icon: icon, doneTabs: c.doneTabs === true, subs: normalizeSubs(c.subs) });
     }
 
     var items = [];
@@ -219,11 +251,16 @@
         name: iname.slice(0, 60),
         price: price,
         tags: normalizeTags(it.tags),
+        sub: typeof it.sub === 'string' ? it.sub.trim().slice(0, 60) : '',
         memo: typeof it.memo === 'string' ? it.memo.trim().slice(0, 200) : '',
         done: it.done === true,
         excluded: it.excluded === true
       });
     }
+    // 준비물의 상세 분류는 자기 분류에 실제로 있는 것만 유지
+    var subIndex = {};
+    categories.forEach(function (c) { subIndex[c.id] = {}; c.subs.forEach(function (sb) { subIndex[c.id][sb.id] = true; }); });
+    items.forEach(function (it) { if (it.sub && !(subIndex[it.categoryId] || {})[it.sub]) it.sub = ''; });
     // notes are optional (added after v1 launch); missing or malformed list => empty
     var notes = [];
     if (raw.notes !== undefined) {
@@ -420,7 +457,7 @@
 
   /* ---------- state ---------- */
   var state;
-  var ui = { filter: 'all', editMode: false, pendingUndo: null, undoTimer: null, collapsed: {}, noteForm: null, qtyEdit: null, highlightEdit: false, activeCategory: null, highlightsCollapsed: false, itemEdit: null, view: 'checklist', picksEdit: null, picksActive: 'gpt', dateEdit: null, nameEdit: null, search: '', searchOpen: false, stripOpen: false, onboardingDismissed: false, deviceName: '', autoName: '', toastRemote: true, lastSeenActivity: 0, activity: [], supportEdit: null, memoFocus: null, seenBase: 0, templateCleared: false, bulkOpen: null, activityExpanded: false, doneTab: {}, tagFilter: {}, tagsMigrated: false };
+  var ui = { filter: 'all', editMode: false, pendingUndo: null, undoTimer: null, collapsed: {}, noteForm: null, qtyEdit: null, highlightEdit: false, activeCategory: null, highlightsCollapsed: false, itemEdit: null, view: 'checklist', picksEdit: null, picksActive: 'gpt', dateEdit: null, nameEdit: null, search: '', searchOpen: false, stripOpen: false, onboardingDismissed: false, deviceName: '', autoName: '', toastRemote: true, lastSeenActivity: 0, activity: [], supportEdit: null, memoFocus: null, seenBase: 0, templateCleared: false, bulkOpen: null, activityExpanded: false, doneTab: {}, tagFilter: {}, tagsMigrated: false, subTab: {}, subsMigrated: false, showSubLabel: false };
 
   // Active tab (narrow screens): falls back to the first category when the saved one is gone.
   function activeCategoryId() {
@@ -461,6 +498,8 @@
         ui.templateCleared = parsed.templateCleared === true;
         ui.activityExpanded = parsed.activityExpanded === true;
         ui.tagsMigrated = parsed.tagsMigrated === true;
+        ui.subsMigrated = parsed.subsMigrated === true;
+        if (parsed.subTab && typeof parsed.subTab === 'object') ui.subTab = parsed.subTab;
         if (parsed.doneTab && typeof parsed.doneTab === 'object') ui.doneTab = parsed.doneTab;
         if (parsed.tagFilter && typeof parsed.tagFilter === 'object') ui.tagFilter = parsed.tagFilter;
         if (parsed.toastRemote === false) ui.toastRemote = false;
@@ -486,6 +525,8 @@
         templateCleared: ui.templateCleared,
         activityExpanded: ui.activityExpanded,
         tagsMigrated: ui.tagsMigrated,
+        subsMigrated: ui.subsMigrated,
+        subTab: ui.subTab,
         doneTab: ui.doneTab,
         tagFilter: ui.tagFilter,
         toastRemote: ui.toastRemote,
@@ -811,7 +852,10 @@
     var catItems = itemsOf(cat.id);
     var p = computeProgress(catItems);
     // 보기 모드는 항상 금액 높은순(미입력은 맨 아래), 편집 모드는 ▲▼로 정한 기본 순서
-    var visible = sortItems(catItems.filter(matchesFilter).filter(function (it) { return matchesCategoryView(cat, it); }), ui.editMode ? 'default' : 'price-desc');
+    var scope = catItems.filter(function (it) { return inSubScope(cat, it); });
+    var visible = sortItems(scope.filter(matchesFilter).filter(function (it) { return matchesCategoryView(cat, it); }), ui.editMode ? 'default' : 'price-desc');
+    var subs = subsOf(cat);
+    var subTab = ui.editMode ? '' : subTabOf(cat);
     var titleId = 'cat-title-' + cat.id;
     var collapsed = !ui.editMode && !!ui.collapsed[cat.id];
     var bodyId = 'cat-body-' + cat.id;
@@ -854,11 +898,24 @@
     }
 
     html += '<div class="category__body" id="' + bodyId + '"' + (collapsed ? ' hidden' : '') + '>';
+    if (ui.editMode) html += renderSubsManager(cat);
+    if (!ui.editMode && subs.length) {
+      var nNone = catItems.filter(function (it) { return !hasSub(cat, it); }).length;
+      html += '<div class="sub-tabs" role="tablist" aria-label="' + escapeHtml(cat.name) + ' 상세 분류">';
+      html += '<button type="button" role="tab" class="sub-tab' + (!subTab ? ' is-active' : '') + '" data-action="sub-tab" data-sub="" data-focus-key="st:' + escapeHtml(cat.id) + ':" aria-selected="' + (!subTab ? 'true' : 'false') + '">전체<b>' + catItems.length + '</b></button>';
+      subs.forEach(function (sb) {
+        var on = subTab === sb.id;
+        var n = catItems.filter(function (it) { return it.sub === sb.id; }).length;
+        html += '<button type="button" role="tab" class="sub-tab' + (on ? ' is-active' : '') + '" data-action="sub-tab" data-sub="' + escapeHtml(sb.id) + '" data-focus-key="st:' + escapeHtml(cat.id) + ':' + escapeHtml(sb.id) + '" aria-selected="' + (on ? 'true' : 'false') + '">' + (sb.icon ? '<span aria-hidden="true">' + escapeHtml(sb.icon) + '</span> ' : '') + escapeHtml(sb.name) + '<b>' + n + '</b></button>';
+      });
+      if (nNone) html += '<button type="button" role="tab" class="sub-tab' + (subTab === '__none' ? ' is-active' : '') + '" data-action="sub-tab" data-sub="__none" data-focus-key="st:' + escapeHtml(cat.id) + ':__none" aria-selected="' + (subTab === '__none' ? 'true' : 'false') + '">미분류<b>' + nNone + '</b></button>';
+      html += '</div>';
+    }
     if (!ui.editMode && catItems.length) {
       if (cat.doneTabs) {
         var dt = doneTabOf(cat.id);
-        var nAll = catItems.filter(function (it) { return !it.excluded; }).length;
-        var nDone = catItems.filter(function (it) { return !it.excluded && it.done; }).length;
+        var nAll = scope.filter(function (it) { return !it.excluded; }).length;
+        var nDone = scope.filter(function (it) { return !it.excluded && it.done; }).length;
         html += '<div class="done-tabs" role="tablist" aria-label="' + escapeHtml(cat.name) + ' 완료 여부">';
         [['all', '전체', nAll], ['todo', '미완료', nAll - nDone], ['done', '완료', nDone]].forEach(function (o) {
           var on = dt === o[0];
@@ -866,11 +923,11 @@
         });
         html += '</div>';
       }
-      var tc = tagCounts(catItems);
+      var tc = tagCounts(scope);
       if (tc.order.length) {
         var tf = tagFilterOf(cat.id);
         html += '<div class="tag-chips" role="group" aria-label="' + escapeHtml(cat.name) + ' 이름별 보기">';
-        html += '<button type="button" class="tag-chip' + (!tf ? ' is-active' : '') + '" data-action="tag-filter" data-tag="" data-focus-key="tf:' + escapeHtml(cat.id) + ':" aria-pressed="' + (!tf ? 'true' : 'false') + '">전체 ' + catItems.length + '</button>';
+        html += '<button type="button" class="tag-chip' + (!tf ? ' is-active' : '') + '" data-action="tag-filter" data-tag="" data-focus-key="tf:' + escapeHtml(cat.id) + ':" aria-pressed="' + (!tf ? 'true' : 'false') + '">전체 ' + scope.length + '</button>';
         tc.order.forEach(function (t) {
           var on = tf === t;
           html += '<button type="button" class="tag-chip ' + tagClass(t) + (on ? ' is-active' : '') + '" data-action="tag-filter" data-tag="' + escapeHtml(t) + '" data-focus-key="tf:' + escapeHtml(cat.id) + ':' + escapeHtml(t) + '" aria-pressed="' + (on ? 'true' : 'false') + '">' + escapeHtml(t) + ' ' + tc.counts[t] + '</button>';
@@ -881,7 +938,7 @@
     var bulkOpen = ui.bulkOpen === cat.id;
     html += '<form class="inline-form quick-add" data-action="add-item">';
     html += '<label class="visually-hidden" for="new-item-' + escapeHtml(cat.id) + '">' + escapeHtml(cat.name) + '에 추가할 준비물</label>';
-    html += '<input type="text" id="new-item-' + escapeHtml(cat.id) + '" data-focus-key="new-item:' + escapeHtml(cat.id) + '" placeholder="준비물 (예: 윤서 수유 패드 5,000원)" maxlength="80" autocomplete="off" enterkeyhint="done">';
+    html += '<input type="text" id="new-item-' + escapeHtml(cat.id) + '" data-focus-key="new-item:' + escapeHtml(cat.id) + '" placeholder="' + escapeHtml(subTab && subTab !== '__none' ? '‘' + findSub(cat, subTab).name + '’에 추가 (예: 윤서 물티슈)' : '준비물 (예: 윤서 수유 패드 5,000원)') + '" maxlength="80" autocomplete="off" enterkeyhint="done">';
     html += '<button type="submit" class="btn btn--primary">추가</button>';
     html += '<button type="button" class="btn quick-add__bulk' + (bulkOpen ? ' is-active' : '') + '" data-action="bulk-toggle" data-focus-key="bulk-toggle:' + escapeHtml(cat.id) + '" aria-expanded="' + (bulkOpen ? 'true' : 'false') + '" aria-controls="bulk-' + escapeHtml(cat.id) + '">여러 개</button>';
     html += '</form>';
@@ -895,12 +952,87 @@
       html += '<p class="items-empty">' + escapeHtml(emptyMessage(catItems)) + '</p>';
     } else {
       if (!ui.editMode) html += '<div class="items-colhead" aria-hidden="true"><span>준비물</span><span>금액</span></div>';
-      html += '<ul class="items">' + visible.map(ui.editMode ? renderItemEdit : renderItemView).join('') + '</ul>';
+      if (!ui.editMode && subs.length && !subTab) {
+        // '전체': 상세 분류별로 묶어서(묶음 안은 금액 높은순), 묶음마다 개수·소계
+        var groups = subs.map(function (sb) { return { sub: sb, list: visible.filter(function (it) { return it.sub === sb.id; }) }; });
+        groups.push({ sub: null, list: visible.filter(function (it) { return !hasSub(cat, it); }) });
+        groups.forEach(function (g) {
+          if (!g.list.length) return;
+          var gp = computeProgress(g.list);
+          html += '<div class="sub-group"><span class="sub-group__name">' + escapeHtml(g.sub ? subLabel(g.sub) : '미분류') + '</span><span class="sub-group__meta">' + g.list.length + '개' + (gp.sum > 0 ? ' · ' + escapeHtml(formatWon(gp.sum)) : '') + '</span></div>';
+          html += '<ul class="items">' + g.list.map(renderItemView).join('') + '</ul>';
+        });
+      } else {
+        ui.showSubLabel = !ui.editMode && !!subTab && subTab !== '__none';
+        html += '<ul class="items">' + visible.map(ui.editMode ? renderItemEdit : renderItemView).join('') + '</ul>';
+        ui.showSubLabel = false;
+      }
     }
 
     html += '</div>';
     html += '</section>';
     return html;
+  }
+
+  function renderSubsManager(cat) {
+    var cid = escapeHtml(cat.id);
+    var h = '<div class="subs-manager"><p class="subs-manager__title">상세 분류 <small>(분류 안에서 한 번 더 나누기 · 최대 ' + SUB_MAX + '개)</small></p>';
+    subsOf(cat).forEach(function (sb) {
+      var n = itemsOf(cat.id).filter(function (it) { return it.sub === sb.id; }).length;
+      h += '<div class="subs-row" data-sub-id="' + escapeHtml(sb.id) + '">';
+      h += '<input type="text" class="subs-row__icon" data-action="set-sub-icon" data-focus-key="sbi:' + escapeHtml(sb.id) + '" value="' + escapeHtml(sb.icon || '') + '" maxlength="' + ICON_MAX + '" placeholder="🙂" aria-label="' + escapeHtml(sb.name) + ' 아이콘">';
+      h += '<input type="text" class="subs-row__name" data-action="rename-sub" data-focus-key="sbn:' + escapeHtml(sb.id) + '" value="' + escapeHtml(sb.name) + '" maxlength="' + SUB_NAME_MAX + '" aria-label="상세 분류 이름">';
+      h += '<span class="subs-row__count">' + n + '개</span>';
+      h += '<button type="button" class="btn btn--small btn--danger" data-action="delete-sub" data-focus-key="sbd:' + escapeHtml(sb.id) + '" aria-label="' + escapeHtml(sb.name) + ' 상세 분류 삭제">삭제</button></div>';
+    });
+    if (subsOf(cat).length < SUB_MAX) {
+      h += '<form class="inline-form subs-add" data-action="add-sub"><label class="visually-hidden" for="new-sub-' + cid + '">새 상세 분류 이름</label>';
+      h += '<input type="text" id="new-sub-' + cid + '" data-focus-key="new-sub:' + cid + '" placeholder="새 상세 분류 (예: 🍼 수유)" maxlength="' + (SUB_NAME_MAX + 4) + '" autocomplete="off"><button type="submit" class="btn btn--small">추가</button></form>';
+    }
+    h += '</div>';
+    return h;
+  }
+  function addSub(catId, text) {
+    var cat = findCategory(catId); if (!cat) return false;
+    var t = String(text || '').trim();
+    if (!t) { showToast('상세 분류 이름을 입력하세요.'); return false; }
+    if (subsOf(cat).length >= SUB_MAX) { showToast('상세 분류는 분류마다 ' + SUB_MAX + '개까지 만들 수 있습니다.'); return false; }
+    // 맨 앞이 이모지면 아이콘으로
+    var icon = '', name = t;
+    var m = t.match(/^(\S+)\s+(.+)$/);
+    if (m && !/[0-9A-Za-z가-힣]/.test(m[1])) { icon = cleanIcon(m[1]); name = m[2]; }
+    name = name.slice(0, SUB_NAME_MAX);
+    if (subsOf(cat).some(function (x) { return x.name === name; })) { showToast('같은 이름의 상세 분류가 이미 있습니다.'); return false; }
+    if (!cat.subs) cat.subs = [];
+    cat.subs.push({ id: uid(), name: name, icon: icon });
+    commit(); act('category', '‘' + cat.name + '’에 상세 분류 ‘' + name + '’ 추가');
+    return true;
+  }
+  function deleteSub(catId, subId) {
+    var cat = findCategory(catId); var sb = cat && findSub(cat, subId); if (!sb) return;
+    var idx = cat.subs.indexOf(sb);
+    var moved = state.items.filter(function (it) { return it.categoryId === catId && it.sub === subId; });
+    if (moved.length && !window.confirm('‘' + sb.name + '’ 상세 분류를 삭제할까요? 안에 있는 준비물 ' + moved.length + '개는 지워지지 않고 ‘미분류’로 옮겨집니다.')) return;
+    cat.subs.splice(idx, 1); moved.forEach(function (it) { it.sub = ''; });
+    commit(); act('category', '‘' + cat.name + '’의 상세 분류 ‘' + sb.name + '’ 삭제');
+    showToast('상세 분류 ‘' + sb.name + '’을 삭제했습니다.', function () {
+      cat.subs.splice(Math.min(idx, cat.subs.length), 0, sb); moved.forEach(function (it) { it.sub = subId; });
+      commit(); showToast('삭제를 취소했습니다.');
+    });
+  }
+  // 상세 분류 해제(되돌리기용): catId가 없으면 모든 분류. 준비물은 지우지 않는다.
+  function clearSubs(catId) {
+    var cats = state.categories.filter(function (c) { return (!catId || c.id === catId) && subsOf(c).length; });
+    if (!cats.length) { showToast('해제할 상세 분류가 없습니다.'); return false; }
+    if (!window.confirm((catId ? '‘' + cats[0].name + '’의' : '모든 분류의') + ' 상세 분류를 해제할까요? 준비물은 그대로 남고 상세 탭만 사라집니다.')) return false;
+    var snap = cats.map(function (c) { return { cat: c, subs: c.subs.slice(), items: state.items.filter(function (it) { return it.categoryId === c.id && it.sub; }).map(function (it) { return { it: it, sub: it.sub }; }) }; });
+    snap.forEach(function (x) { x.cat.subs = []; x.items.forEach(function (y) { y.it.sub = ''; }); });
+    commit(); act('category', (catId ? '‘' + cats[0].name + '’ ' : '전체 ') + '상세 분류 해제');
+    showToast('상세 분류를 해제했습니다.', function () {
+      snap.forEach(function (x) { x.cat.subs = x.subs; x.items.forEach(function (y) { y.it.sub = y.sub; }); });
+      commit(); showToast('상세 분류를 되돌렸습니다.');
+    });
+    return true;
   }
 
   function qtyLabel(it) { return formatWon(it.price); }
@@ -917,6 +1049,7 @@
     html += '<label class="item__check">';
     html += '<input type="checkbox" data-action="toggle-done" data-focus-key="check:' + id + '"' + (it.done ? ' checked' : '') + (it.excluded ? ' disabled' : '') + ' aria-label="' + escapeHtml(it.name) + ' 가방에 담기 완료">';
     html += '<span class="item__body">';
+    if (ui.showSubLabel && it.sub) { var sCat = findCategory(it.categoryId), sSub = sCat && findSub(sCat, it.sub); if (sSub) html += '<span class="item__sub">' + escapeHtml(sSub.name) + '</span>'; }
     html += '<span class="item__name">' + tagsHtml(it) + escapeHtml(it.name) + '</span>';
     if (it.excluded) html += '<span class="badge badge--excluded">제외</span>';
     else if (it.done) html += '<span class="badge badge--done">완료</span>';
@@ -971,6 +1104,13 @@
     html += '<input type="text" id="name-' + id + '" data-field="name" data-focus-key="name:' + id + '" value="' + escapeHtml(it.name) + '" maxlength="60" required></div>';
 
     html += '<div class="field"><label for="qty-' + id + '">금액</label>' + priceFieldHtml(it, id, 'qty:' + id) + '</div>';
+    var eCat = findCategory(it.categoryId);
+    if (eCat && subsOf(eCat).length) {
+      html += '<div class="field"><label for="sub-' + id + '">상세 분류</label><select id="sub-' + id + '" data-field="sub" data-focus-key="sub:' + id + '">';
+      html += '<option value=""' + (!hasSub(eCat, it) ? ' selected' : '') + '>미분류</option>';
+      subsOf(eCat).forEach(function (sb) { html += '<option value="' + escapeHtml(sb.id) + '"' + (it.sub === sb.id ? ' selected' : '') + '>' + escapeHtml(subLabel(sb)) + '</option>'; });
+      html += '</select></div>';
+    }
 
     var tagOptions = TAG_NAMES.slice(); (it.tags || []).forEach(function (t) { if (tagOptions.indexOf(t) === -1) tagOptions.push(t); });
     html += '<div class="field"><span class="field__label">누구 것 (여러 명 선택 가능)</span><div class="tag-picks">';
@@ -1889,11 +2029,15 @@ datesSorted().forEach(function (d) {
     }
     return { name: t.slice(0, 60), price: null, tags: tp.tags };
   }
+  function currentSubFor(categoryId) {
+    var c = findCategory(categoryId); if (!c || ui.editMode) return '';
+    var st = subTabOf(c); return st && st !== '__none' ? st : '';
+  }
   function addItem(categoryId, text) {
     var p = parseItemLine(text);
     if (!p) { showToast('준비물 이름을 입력하세요.'); return false; }
     if (!findCategory(categoryId)) return false;
-    state.items.push({ id: uid(), categoryId: categoryId, name: p.name, price: p.price, tags: p.tags || [], memo: '', done: false, excluded: false });
+    state.items.push({ id: uid(), categoryId: categoryId, name: p.name, price: p.price, tags: p.tags || [], sub: currentSubFor(categoryId), memo: '', done: false, excluded: false });
     commit();
     act('add', '‘' + p.name + '’ 추가' + (p.tags && p.tags.length ? ' (' + p.tags.join('+') + ')' : ''));
     showToast('‘' + p.name + '’ 추가' + (p.tags && p.tags.length ? ' · ' + p.tags.join('+') : '') + (p.price !== null ? ' · ' + formatWon(p.price) : ''));
@@ -1904,7 +2048,7 @@ datesSorted().forEach(function (d) {
     var added = [];
     String(text || '').split(/\r?\n/).forEach(function (line) {
       var p = parseItemLine(line); if (!p) return;
-      state.items.push({ id: uid(), categoryId: categoryId, name: p.name, price: p.price, tags: p.tags || [], memo: '', done: false, excluded: false });
+      state.items.push({ id: uid(), categoryId: categoryId, name: p.name, price: p.price, tags: p.tags || [], sub: currentSubFor(categoryId), memo: '', done: false, excluded: false });
       added.push(p.name);
     });
     if (!added.length) { showToast('추가할 준비물이 없습니다. 한 줄에 하나씩 적어 주세요.'); return 0; }
@@ -1982,6 +2126,72 @@ datesSorted().forEach(function (d) {
       changed.forEach(function (c) { c.it.name = c.name; c.it.tags = c.tags; });
       catChanged.forEach(function (c) { c.doneTabs = false; });
       commit(); showToast('자동 분류를 되돌렸습니다.');
+    });
+  }
+  // 상세 분류 자동 구성(한 번): 분류 이름으로 규칙을 고르고, 준비물 이름·태그로 상세 분류를 정한다. 되돌리기 가능.
+  var SUB_RULES = [
+    { cat: /병원/, subs: [
+      ['👶🏻', '아기', function (it) { return it.tags.indexOf('축복') !== -1 && it.tags.indexOf('윤서') === -1; }],
+      ['🤱🏻', '수유', /수유패드|모유|양배추|얼음팩|유두|별티/],
+      ['🩹', '위생/회복', /안심|오버나이트|수건|세면|스킨케어|티슈|비데|마스크|소독|튼살|수세미|베라수/],
+      ['👕', '의류/보온', /슬리퍼|양말|스타킹|복대|보호대|브래지어|팬티|가디건|퇴원복|여벌|침구|머리끈/],
+      ['🔌', '편의/기타', null]
+    ], order: ['의류/보온', '위생/회복', '수유', '아기', '편의/기타'] },
+    { cat: /조리원/, subs: [
+      ['👶🏻', '아기', function (it) { return it.tags.indexOf('축복') !== -1 && it.tags.indexOf('윤서') === -1; }],
+      ['🧴', '위생/케어', /마스크팩|손톱깎이|빗|흉터|세정제/],
+      ['👕', '의류', /여벌|옷/],
+      ['🎒', '편의/기타', null]
+    ], order: ['아기', '위생/케어', '의류', '편의/기타'] },
+    { cat: /맞이/, subs: [
+      ['🍼', '수유', /젖병|분유/],
+      ['🧺', '세탁', /옷걸이|건조대|세제|세탁/],
+      ['🛏️', '가구/수면', /옷장|수납장|침대|갈이대|베개|정리함/],
+      ['🌡️', '가전/환경', /가습기|온습도계|베이비캠/],
+      ['🛁', '위생/목욕', null]
+    ], order: ['수유', '위생/목욕', '세탁', '가구/수면', '가전/환경'] },
+    { cat: /동대문/, subs: [
+      ['👕', '의류', /배냇|바디수트|양말|우주복|내복|조끼|스와들/],
+      ['🧷', '기저귀/손수건', /기저귀|손수건/],
+      ['🛏️', '침구/패드', null]
+    ], order: ['의류', '침구/패드', '기저귀/손수건'] },
+    { cat: /^기타$/, subs: [
+      ['🚗', '외출', /카시트|아기띠|유모차|블랭킷/],
+      ['🍼', '수유/건강', /분유|콧물/],
+      ['🧸', '놀이/육아템', null]
+    ], order: ['외출', '놀이/육아템', '수유/건강'] }
+  ];
+  function migrateSubsOnce() {
+    if (ui.subsMigrated) return;
+    ui.subsMigrated = true; saveUiPrefs();
+    if (state.categories.some(function (c) { return subsOf(c).length; })) return; // 이미 누군가 구성함
+    var done = [], count = 0;
+    state.categories.forEach(function (cat) {
+      var rule = null;
+      SUB_RULES.forEach(function (r) { if (!rule && r.cat.test(cat.name)) rule = r; });
+      var catItems = itemsOf(cat.id);
+      if (!rule || !catItems.length) return;
+      var byName = {};
+      rule.subs.forEach(function (d) { byName[d[1]] = { id: uid(), name: d[1], icon: d[0] }; });
+      var assigned = [];
+      catItems.forEach(function (it) {
+        var pick = null;
+        rule.subs.forEach(function (d) {
+          if (pick) return;
+          var test = d[2];
+          if (test === null || (typeof test === 'function' ? test(it) : test.test(it.name))) pick = byName[d[1]];
+        });
+        if (pick) { assigned.push({ it: it, prev: it.sub || '' }); it.sub = pick.id; count++; }
+      });
+      cat.subs = rule.order.map(function (n) { return byName[n]; }).filter(function (sb) { return catItems.some(function (it) { return it.sub === sb.id; }); });
+      done.push({ cat: cat, assigned: assigned });
+    });
+    if (!done.length) return;
+    commit();
+    act('category', '상세 분류 자동 구성 (분류 ' + done.length + '개, 준비물 ' + count + '개)');
+    showToast('준비물 ' + count + '개를 상세 분류로 나눴습니다. 편집에서 이름을 바꾸거나 옮길 수 있어요.', function () {
+      done.forEach(function (x) { x.cat.subs = []; x.assigned.forEach(function (y) { y.it.sub = y.prev; }); });
+      commit(); showToast('상세 분류 자동 구성을 되돌렸습니다.');
     });
   }
   function clearTemplateItemsOnce() {
@@ -2068,6 +2278,7 @@ datesSorted().forEach(function (d) {
     var it = findItem(id);
     if (!it || !findCategory(categoryId) || it.categoryId === categoryId) return;
     it.categoryId = categoryId;
+    it.sub = '';
     ui.itemEdit = null;
     commit();
     act('edit', '‘' + it.name + '’ → ‘' + findCategory(categoryId).name + '’ 분류로 이동');
@@ -2103,6 +2314,12 @@ datesSorted().forEach(function (d) {
       case 'memo':
         it.memo = inputEl.value.trim().slice(0, 200);
         break;
+      case 'sub': {
+        var fCat = findCategory(it.categoryId);
+        it.sub = inputEl.value && fCat && findSub(fCat, inputEl.value) ? inputEl.value : '';
+        setError('');
+        break;
+      }
       case 'tag': {
         var tg = inputEl.dataset.tag;
         var cur = (it.tags || []).slice();
@@ -2121,6 +2338,7 @@ datesSorted().forEach(function (d) {
     if (field === 'name') act('edit', '‘' + it.name + '’ 이름 수정');
     else if (field === 'price') act('edit', '‘' + it.name + '’ 금액 ' + (qtyLabel(it) || '미입력') + '로 변경');
     else if (field === 'memo') act('edit', '‘' + it.name + '’ 메모 수정');
+    else if (field === 'sub') { var aCat = findCategory(it.categoryId), aSub = aCat && findSub(aCat, it.sub); act('edit', '‘' + it.name + '’ 상세 분류 ' + (aSub ? aSub.name : '미분류') + '(으)로 변경'); }
     else if (field === 'tag') act('edit', '‘' + it.name + '’ 태그 ' + tagLabel(it) + '(으)로 변경');
     var qtyBtn = $('.item__qty', rowEl);
     if (qtyBtn) {
@@ -2247,7 +2465,7 @@ datesSorted().forEach(function (d) {
     if (el.readOnly || el.disabled) return false; // readonly share-link etc. must not block sync
     if (el.type === 'checkbox' || el.type === 'radio' || el.type === 'file' || el.type === 'button') return false;
     // Only editable fields inside an item/note/highlights editor should defer a remote update.
-    return !!el.closest('.item--edit, .is-qty-editing, .note-form, #highlights-form, #add-category-form, .pick-form, .date-form, .name-form, .support-form, .memo-item, #view-settings');
+    return !!el.closest('.item--edit, .subs-manager, .is-qty-editing, .note-form, #highlights-form, #add-category-form, .pick-form, .date-form, .name-form, .support-form, .memo-item, #view-settings');
   }
 
   function applyRemote(remoteState) {
@@ -2272,7 +2490,7 @@ datesSorted().forEach(function (d) {
       applyingRemote = false;
     }
     // 방 참여 직후에는 구독(attach)이 applyRemote 뒤에 붙으므로, 비우기(=변경 전파)는 한 틱 뒤에 실행한다.
-    setTimeout(function () { clearTemplateItemsOnce(); migrateTagsOnce(); }, 0);
+    setTimeout(function () { clearTemplateItemsOnce(); migrateTagsOnce(); migrateSubsOnce(); }, 0);
     return true;
   }
 
@@ -2609,6 +2827,8 @@ datesSorted().forEach(function (d) {
     if (clearItemsBtn) clearItemsBtn.addEventListener('click', function () { clearAllItems(false); });
     var clearItemsBtn2 = $('#clear-items-btn-2');
     if (clearItemsBtn2) clearItemsBtn2.addEventListener('click', function () { clearAllItems(false); });
+    var clearSubsBtn = $('#clear-subs-btn');
+    if (clearSubsBtn) clearSubsBtn.addEventListener('click', function () { clearSubs(null); });
     var clearCatBtn = $('#clear-category-btn');
     if (clearCatBtn) clearCatBtn.addEventListener('click', function () { var cid = activeCategoryId(); if (cid) clearCategoryItems(cid); });
     var resetBtn = $('#reset-btn');
@@ -2848,6 +3068,14 @@ datesSorted().forEach(function (d) {
       var row = btn.closest('[data-item-id]');
       switch (btn.dataset.action) {
         case 'delete-category': deleteCategory(card.dataset.categoryId); break;
+        case 'sub-tab': {
+          var scid2 = card.dataset.categoryId;
+          ui.subTab[scid2] = btn.dataset.sub || ''; ui.tagFilter[scid2] = ''; saveUiPrefs();
+          renderCategories();
+          var sbtn = document.querySelector('[data-focus-key="st:' + scid2 + ':' + (btn.dataset.sub || '') + '"]'); if (sbtn) { sbtn.focus(); if (sbtn.scrollIntoView) sbtn.scrollIntoView({ block: 'nearest', inline: 'center' }); }
+          break;
+        }
+        case 'delete-sub': deleteSub(card.dataset.categoryId, btn.closest('[data-sub-id]').dataset.subId); break;
         case 'done-tab': {
           var dcid = card.dataset.categoryId;
           ui.doneTab[dcid] = btn.dataset.tab; saveUiPrefs();
@@ -2914,6 +3142,15 @@ datesSorted().forEach(function (d) {
     });
 
     root.addEventListener('submit', function (e) {
+      var subForm = e.target.closest('form[data-action="add-sub"]');
+      if (subForm) {
+        e.preventDefault();
+        var scard = subForm.closest('[data-category-id]');
+        if (addSub(scard.dataset.categoryId, $('input[type="text"]', subForm).value)) {
+          var ns = document.querySelector('[data-focus-key="new-sub:' + scard.dataset.categoryId + '"]'); if (ns) ns.focus();
+        }
+        return;
+      }
       var bulk = e.target.closest('form[data-action="bulk-add"]');
       if (bulk) {
         e.preventDefault();
@@ -2953,6 +3190,19 @@ datesSorted().forEach(function (d) {
       if (el.dataset.action === 'move-item') { moveItem(row.dataset.itemId, el.value); return; }
       if (el.dataset.action === 'rename-category') { renameCategory(card.dataset.categoryId, el.value, el); return; }
       if (el.dataset.action === 'set-icon') { setCategoryIcon(card.dataset.categoryId, el.value); return; }
+      if (el.dataset.action === 'rename-sub' || el.dataset.action === 'set-sub-icon') {
+        var rCat = findCategory(card.dataset.categoryId), rSub = rCat && findSub(rCat, el.closest('[data-sub-id]').dataset.subId);
+        if (!rSub) return;
+        if (el.dataset.action === 'rename-sub') {
+          var nn = el.value.trim().slice(0, SUB_NAME_MAX);
+          if (!nn) { el.value = rSub.name; showToast('상세 분류 이름은 비워둘 수 없습니다.'); return; }
+          if (nn === rSub.name) return;
+          act('category', '상세 분류 ‘' + rSub.name + '’ → ‘' + nn + '’'); rSub.name = nn;
+        } else {
+          var ni = cleanIcon(el.value); if (ni === (rSub.icon || '')) return; rSub.icon = ni; el.value = ni;
+        }
+        saveState(); return;
+      }
       if (el.dataset.action === 'toggle-done-tabs') { var dcat = findCategory(card.dataset.categoryId); if (dcat) { dcat.doneTabs = !!el.checked; saveState(); act('category', '분류 ‘' + dcat.name + '’ 완료 탭 ' + (dcat.doneTabs ? '켬' : '끔')); } return; }
       if (el.dataset.field && row) { updateItemField(row.dataset.itemId, el.dataset.field, el, row); }
     });
@@ -2964,7 +3214,7 @@ datesSorted().forEach(function (d) {
 
     // Enter in an edit field should commit and not submit anything.
     root.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter' && e.target.matches('input[data-field], input[data-action="rename-category"], input[data-action="set-icon"]')) {
+      if (e.key === 'Enter' && e.target.matches('input[data-field], input[data-action="rename-category"], input[data-action="set-icon"], input[data-action="rename-sub"], input[data-action="set-sub-icon"]')) {
         e.preventDefault();
         e.target.blur();
         var qrow = e.target.closest('.is-qty-editing');
@@ -2998,7 +3248,7 @@ datesSorted().forEach(function (d) {
     render();
     var storedRoom = null;
     try { storedRoom = window.localStorage.getItem('birth-bag-checklist:room'); } catch (e) { /* ignore */ }
-    if (!storedRoom && !/[?&]room=/.test(window.location.search)) { clearTemplateItemsOnce(); migrateTagsOnce(); }
+    if (!storedRoom && !/[?&]room=/.test(window.location.search)) { clearTemplateItemsOnce(); migrateTagsOnce(); migrateSubsOnce(); }
     // sync.js is loaded after app.js; bind once it has had a chance to run.
     window.addEventListener('load', bindShareEvents);
   }
