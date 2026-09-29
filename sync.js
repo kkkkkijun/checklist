@@ -348,12 +348,26 @@
     if (app.setActivity && sync.adapter.subscribeActivity) {
       offActivity = sync.adapter.subscribeActivity(roomId, function (list) { app.setActivity(list); });
     }
+    clearOldActivityOnce(roomId);
     offConnection = sync.adapter.onConnection(function (online) {
       if (wasOnline === online) return;
       wasOnline = online;
       if (!online) setStatus('offline', '오프라인입니다. 변경은 기기에 저장되고 연결되면 자동으로 올라갑니다.');
       else if (sync.status === 'offline') setStatus('online');
     });
+  }
+
+  // 홈의 '최근 변경' 칸을 없애면서 그동안 쌓인 변경 기록을 방마다 한 번 비운다.
+  // (새 변경은 계속 기록된다: 앱을 보는 중에 가족의 변경을 알림 문구로 띄우는 데 쓴다)
+  var ACTIVITY_CLEARED_KEY = 'birth-bag-checklist:activity-cleared';
+  function clearOldActivityOnce(roomId) {
+    var done = {};
+    try { done = JSON.parse(window.localStorage.getItem(ACTIVITY_CLEARED_KEY) || '{}') || {}; } catch (e) { done = {}; }
+    if (done[roomId]) return;
+    sync.adapter.update(roomId, { activity: null }).then(function () {
+      done[roomId] = true;
+      try { window.localStorage.setItem(ACTIVITY_CLEARED_KEY, JSON.stringify(done)); } catch (e) { /* ignore */ }
+    }, function () { /* 다음에 연결될 때 다시 시도 */ });
   }
 
   function detach() {

@@ -105,10 +105,23 @@
   }
   function formatNumber(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
   function formatWon(n) { return n === null || n === undefined ? '' : formatNumber(n) + '원'; }
-  // 입력 중 쉼표 자동 삽입 (커서는 끝으로)
+  // 입력 중 쉼표 자동 삽입. 값이 바뀔 때만 다시 쓰고, 커서는 같은 숫자 개수 뒤에 둔다
+  // (매번 값을 덮어쓰고 커서를 끝으로 보내면 모바일 키보드가 입력 위치를 잃어 숫자가 사라지거나 0만 남는다)
   function formatPriceInput(el) {
-    var digits = el.value.replace(/[^\d]/g, '').replace(/^0+(?=\d)/, '').slice(0, 9);
-    el.value = digits ? formatNumber(digits) : '';
+    var before = el.value;
+    var caret = typeof el.selectionStart === 'number' ? el.selectionStart : before.length;
+    var digitsLeft = before.slice(0, caret).replace(/[^\d]/g, '').length;
+    var all = before.replace(/[^\d]/g, '');
+    var trimmed = all.replace(/^0+(?=\d)/, '');
+    digitsLeft = Math.max(0, digitsLeft - (all.length - trimmed.length));
+    var digits = trimmed.slice(0, 9);
+    var next = digits ? formatNumber(digits) : '';
+    if (next === before) return;
+    el.value = next;
+    if (document.activeElement !== el || !el.setSelectionRange) return;
+    var pos = 0, seen = 0;
+    while (pos < next.length && seen < digitsLeft) { if (/\d/.test(next.charAt(pos))) seen++; pos++; }
+    try { el.setSelectionRange(pos, pos); } catch (e) { /* ignore */ }
   }
 
   /* ---------- 상세 분류 (분류 안의 하위 탭) ---------- */
@@ -457,7 +470,7 @@
 
   /* ---------- state ---------- */
   var state;
-  var ui = { filter: 'all', editMode: false, pendingUndo: null, undoTimer: null, collapsed: {}, noteForm: null, qtyEdit: null, highlightEdit: false, activeCategory: null, highlightsCollapsed: false, itemEdit: null, view: 'checklist', picksEdit: null, picksActive: 'gpt', dateEdit: null, nameEdit: null, search: '', searchOpen: false, stripOpen: false, onboardingDismissed: false, deviceName: '', autoName: '', toastRemote: true, lastSeenActivity: 0, activity: [], supportEdit: null, memoFocus: null, seenBase: 0, templateCleared: false, bulkOpen: null, activityExpanded: false, doneTab: {}, tagFilter: {}, tagsMigrated: false, subTab: {}, subsMigrated: false, showSubLabel: false };
+  var ui = { filter: 'all', editMode: false, pendingUndo: null, undoTimer: null, collapsed: {}, noteForm: null, qtyEdit: null, highlightEdit: false, activeCategory: null, highlightsCollapsed: false, itemEdit: null, view: 'checklist', picksEdit: null, picksActive: 'gpt', dateEdit: null, nameEdit: null, search: '', searchOpen: false, stripOpen: false, onboardingDismissed: false, deviceName: '', autoName: '', toastRemote: true, activity: [], supportEdit: null, memoFocus: null, templateCleared: false, bulkOpen: null, doneTab: {}, tagFilter: {}, tagsMigrated: false, subTab: {}, subsMigrated: false, showSubLabel: false };
 
   // Active tab (narrow screens): falls back to the first category when the saved one is gone.
   function activeCategoryId() {
@@ -496,14 +509,12 @@
         if (typeof parsed.deviceName === 'string') ui.deviceName = parsed.deviceName.slice(0, 12);
         if (typeof parsed.autoName === 'string') ui.autoName = parsed.autoName.slice(0, 12);
         ui.templateCleared = parsed.templateCleared === true;
-        ui.activityExpanded = parsed.activityExpanded === true;
         ui.tagsMigrated = parsed.tagsMigrated === true;
         ui.subsMigrated = parsed.subsMigrated === true;
         if (parsed.subTab && typeof parsed.subTab === 'object') ui.subTab = parsed.subTab;
         if (parsed.doneTab && typeof parsed.doneTab === 'object') ui.doneTab = parsed.doneTab;
         if (parsed.tagFilter && typeof parsed.tagFilter === 'object') ui.tagFilter = parsed.tagFilter;
         if (parsed.toastRemote === false) ui.toastRemote = false;
-        if (typeof parsed.lastSeenActivity === 'number') ui.lastSeenActivity = parsed.lastSeenActivity;
         if (parsed.picksActive === 'gpt' || parsed.picksActive === 'claude') ui.picksActive = parsed.picksActive;
       }
     } catch (e) { /* UI preferences are optional */ }
@@ -523,14 +534,12 @@
         deviceName: ui.deviceName,
         autoName: ui.autoName,
         templateCleared: ui.templateCleared,
-        activityExpanded: ui.activityExpanded,
         tagsMigrated: ui.tagsMigrated,
         subsMigrated: ui.subsMigrated,
         subTab: ui.subTab,
         doneTab: ui.doneTab,
         tagFilter: ui.tagFilter,
         toastRemote: ui.toastRemote,
-        lastSeenActivity: ui.lastSeenActivity,
         highlightsCollapsed: ui.highlightsCollapsed
       }));
     } catch (e) { /* ignore */ }
@@ -661,7 +670,6 @@
     ui.dateEdit = null;
     ui.nameEdit = null;
     ui.supportEdit = null;
-    if (view === 'home') { ui.seenBase = ui.lastSeenActivity; markActivitySeen(false); }
     saveUiPrefs();
     render();
     window.scrollTo(0, 0);
@@ -690,8 +698,6 @@
     var vs = $('#view-settings'); if (vs) vs.hidden = ui.view !== 'settings';
     var vsp = $('#view-supports'); if (vsp) vsp.hidden = ui.view !== 'supports';
     var vmm = $('#view-memos'); if (vmm) vmm.hidden = ui.view !== 'memos';
-    var hb = $('#ptab-home-count');
-    if (hb) { var un = unreadActivityCount(); hb.textContent = un ? (un > 99 ? '99+' : String(un)) : ''; }
     var vc = $('#view-checklist'), vn = $('#view-notes'), vp = $('#view-picks'), vm = $('#view-names');
     if (vc) vc.hidden = ui.view !== 'checklist';
     if (vn) vn.hidden = ui.view !== 'notes';
@@ -728,7 +734,6 @@
     renderHome();
     renderHighlightsStrip();
     renderDday();
-    renderActivity();
     renderMemo();
     renderSettings();
     renderSupports();
@@ -1695,15 +1700,6 @@ datesSorted().forEach(function (d) {
     if (!S || !S.getState().roomId) return;
     try { S.logActivity({ kind: kind, text: text }); } catch (e) { /* activity is best-effort */ }
   }
-  function unreadActivityCount() {
-    var me = myName();
-    return ui.activity.filter(function (a) { return a.t > ui.lastSeenActivity && a.who !== me; }).length;
-  }
-  function markActivitySeen(rerender) {
-    var maxT = 0;
-    ui.activity.forEach(function (a) { if (a.t > maxT) maxT = a.t; });
-    if (maxT > ui.lastSeenActivity) { ui.lastSeenActivity = maxT; saveUiPrefs(); if (rerender) render(); }
-  }
   function relTime(t) {
     var d = Date.now() - t;
     if (d < 60000) return '방금';
@@ -1711,39 +1707,7 @@ datesSorted().forEach(function (d) {
     if (d < 86400000) return Math.floor(d / 3600000) + '시간 전';
     var dt = new Date(t); return (dt.getMonth() + 1) + '/' + dt.getDate() + ' ' + timeStampOf(dt);
   }
-  function renderActivity() {
-    var list = $('#activity-list');
-    if (!list) return;
-    var S = window.ChecklistSync;
-    var st = S ? S.getState() : null;
-    var clearBtn = $('#activity-clear');
-    var toggleBtn = $('#activity-toggle');
-    if (!st || !st.roomId) {
-      list.innerHTML = '<li class="activity-empty">가족 공유를 연결하면 서로의 변경 내용이 여기에 표시됩니다.</li>';
-      if (clearBtn) clearBtn.hidden = true;
-      if (toggleBtn) toggleBtn.hidden = true;
-      return;
-    }
-    var me = myName();
-    var all = ui.activity.slice().sort(function (a, b) { return b.t - a.t; }).slice(0, 30);
-    if (!all.length) { list.innerHTML = '<li class="activity-empty">아직 변경 기록이 없습니다.</li>'; if (clearBtn) clearBtn.hidden = true; if (toggleBtn) toggleBtn.hidden = true; return; }
-    var base = Math.min(ui.seenBase || 0, ui.lastSeenActivity);
-    var fresh = all.filter(function (a) { return a.t > base && a.who !== me; }).length;
-    if (clearBtn) clearBtn.hidden = fresh === 0;
-    // 접힌 상태에서는 최근 5개만
-    var LIMIT = 5;
-    var items = ui.activityExpanded ? all : all.slice(0, LIMIT);
-    if (toggleBtn) {
-      toggleBtn.hidden = all.length <= LIMIT;
-      toggleBtn.textContent = ui.activityExpanded ? '접기 ▴' : '펼치기 ▾ (' + (all.length - LIMIT) + '개 더)';
-      toggleBtn.setAttribute('aria-expanded', ui.activityExpanded ? 'true' : 'false');
-    }
-    list.innerHTML = items.map(function (a) {
-      var unread = a.t > base && a.who !== me;
-      return '<li class="activity' + (unread ? ' is-unread' : '') + '"><span class="activity__who">' + escapeHtml(a.who || '누군가') + '</span>' +
-        '<span class="activity__text">' + escapeHtml(a.text || '') + '</span><span class="activity__time">' + escapeHtml(relTime(a.t)) + '</span></li>';
-    }).join('');
-  }
+  // 가족의 변경 기록은 화면에 목록으로 보여주지 않고, 앱을 보는 중에 새로 들어온 변경만 알림 문구로 띄운다.
   var activityInitialized = false;
   function setActivity(list) {
     var prevMax = 0;
@@ -1758,9 +1722,6 @@ datesSorted().forEach(function (d) {
       }
     }
     activityInitialized = true;
-    if (ui.view === 'home' && document.visibilityState === 'visible') markActivitySeen(false);
-    renderActivity();
-    renderPrimaryTabs();
   }
 
   /* ---------- 설정 ---------- */
@@ -2349,6 +2310,15 @@ datesSorted().forEach(function (d) {
     }
   }
 
+  // 금액 칸에 커서가 있는 채로 '완료' 등을 누르면 change 이벤트보다 render()가 먼저 칸을 지워
+  // 입력한 금액이 사라진다(아이폰은 버튼을 눌러도 칸에서 포커스가 빠지지 않음). 다시 그리기 전에 먼저 반영한다.
+  function flushPriceInputs() {
+    Array.prototype.forEach.call(document.querySelectorAll('#categories input[data-field="price"]'), function (inp) {
+      var r = inp.closest('[data-item-id]');
+      if (r) updateItemField(r.dataset.itemId, 'price', inp, r);
+    });
+  }
+
   /* ---------- backup ---------- */
   function backupPayload(pretty) {
     return JSON.stringify({
@@ -2533,7 +2503,6 @@ datesSorted().forEach(function (d) {
     badge.className = 'sync-pill' + (st.status === 'online' ? ' is-online' : st.status === 'error' ? ' is-error' : st.status === 'offline' ? ' is-offline' : st.configured ? ' is-off' : ' is-local');
     badge.hidden = false;
     renderHome();
-    renderActivity();
     var html = '';
     if (!st.configured) {
       html += '<p class="share__text">가족 공유를 쓰려면 사이트에 Firebase 설정이 필요합니다. 아직 설정되어 있지 않아 기록은 이 기기에만 저장됩니다.</p>';
@@ -2774,14 +2743,10 @@ datesSorted().forEach(function (d) {
       if (t.dataset.action === 'open-memo') { ui.memoFocus = t.dataset.memoId; }
       setView('memos');
     });
-    var actClear = $('#activity-clear');
-    if (actClear) actClear.addEventListener('click', function () { markActivitySeen(true); ui.seenBase = ui.lastSeenActivity; renderActivity(); });
-    var actToggle = $('#activity-toggle');
-    if (actToggle) actToggle.addEventListener('click', function () { ui.activityExpanded = !ui.activityExpanded; saveUiPrefs(); renderActivity(); });
 
     // 설정
     var dnInput = $('#device-name');
-    if (dnInput) dnInput.addEventListener('change', function () { ui.deviceName = dnInput.value.trim().slice(0, 12); saveUiPrefs(); renderActivity(); renderPrimaryTabs(); showToast('이름을 저장했습니다.'); });
+    if (dnInput) dnInput.addEventListener('change', function () { ui.deviceName = dnInput.value.trim().slice(0, 12); saveUiPrefs(); showToast('이름을 저장했습니다.'); });
     var ddInput = $('#due-date');
     if (ddInput) ddInput.addEventListener('change', function () {
       var v = ddInput.value; if (v && !/^\d{4}-\d{2}-\d{2}$/.test(v)) v = '';
@@ -3066,6 +3031,7 @@ datesSorted().forEach(function (d) {
       if (!btn || btn.tagName !== 'BUTTON') return;
       var card = btn.closest('[data-category-id]');
       var row = btn.closest('[data-item-id]');
+      flushPriceInputs();
       switch (btn.dataset.action) {
         case 'delete-category': deleteCategory(card.dataset.categoryId); break;
         case 'sub-tab': {
@@ -3208,7 +3174,12 @@ datesSorted().forEach(function (d) {
     });
 
     // 금액 칸: 입력하는 대로 쉼표를 넣는다 (5000 → 5,000)
+    // 키보드가 글자를 조합 중일 때(삼성 키보드 등) 값을 바꾸면 입력이 꼬이므로 조합이 끝난 뒤에 넣는다.
     root.addEventListener('input', function (e) {
+      if (e.isComposing) return;
+      if (e.target.matches('input[data-field="price"]')) formatPriceInput(e.target);
+    });
+    root.addEventListener('compositionend', function (e) {
       if (e.target.matches('input[data-field="price"]')) formatPriceInput(e.target);
     });
 
@@ -3235,7 +3206,6 @@ datesSorted().forEach(function (d) {
     var loaded = loadState();
     state = loaded.state;
     loadUiPrefs();
-    ui.seenBase = ui.lastSeenActivity;
     if (!uiPrefsFound) ui.view = 'home';
     if (ui.view === 'supports' || ui.view === 'memos') ui.view = 'home';
     bindEvents();

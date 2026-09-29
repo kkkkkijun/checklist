@@ -209,7 +209,6 @@ button, input, select, textarea { font: inherit; color: inherit; }
   min-height: 52px; padding: 4px 0; border: 0; background: none; border-radius: 10px; cursor: pointer;
   color: var(--muted); font-weight: 600; font-size: 0.74rem; position: relative;
 }
-.bottom-nav .primary-tab__count--alert { color: #fff; background: var(--danger); }
 .bottom-nav .primary-tab__icon { font-size: 1.25rem; line-height: 1; }
 .bottom-nav .primary-tab__label { white-space: nowrap; }
 .bottom-nav .primary-tab__count {
@@ -236,16 +235,6 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 
 /* ---------- 홈: 최근 변경 / 메모 / 링크 ---------- */
-.activity-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 2px; }
-.activity { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: baseline; padding: 6px 6px; border-radius: 8px; font-size: 0.88rem; }
-.activity.is-unread { background: #fff3ec; }
-.activity.is-unread::before { content: ''; }
-.activity__who { font-weight: 700; color: var(--peach-strong); white-space: nowrap; }
-.activity__text { min-width: 0; overflow-wrap: anywhere; }
-.activity__time { font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
-.activity-empty { padding: 8px 6px; color: var(--muted); font-size: 0.88rem; }
-#activity-card .settings-actions { flex-wrap: nowrap; }
-.activity-toggle { white-space: nowrap; }
 .memo-input { width: 100%; min-height: 96px; margin-top: 8px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: #fff; resize: vertical; line-height: 1.55; font-size: 1rem; }
 .memo-status { margin: 0; font-size: 0.78rem; color: var(--muted); }
 .home-link {
