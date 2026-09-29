@@ -2438,10 +2438,18 @@ datesSorted().forEach(function (d) {
     return !!el.closest('.item--edit, .subs-manager, .is-qty-editing, .note-form, #highlights-form, #add-category-form, .pick-form, .date-form, .name-form, .support-form, .memo-item, #view-settings');
   }
 
+  var migrationsQueued = false;
+  function scheduleOneTimeMigrations() {
+    if (migrationsQueued || (ui.templateCleared && ui.tagsMigrated && ui.subsMigrated)) return;
+    migrationsQueued = true;
+    // 방 참여 직후에는 구독(attach)이 applyRemote 뒤에 붙으므로 한 틱 뒤에 실행한다.
+    setTimeout(function () { migrationsQueued = false; if (isTyping()) return; clearTemplateItemsOnce(); migrateTagsOnce(); migrateSubsOnce(); }, 0);
+  }
   function applyRemote(remoteState) {
     var result = normalizeState(remoteState);
     if (!result.ok) return false;
-    if (JSON.stringify(result.data) === JSON.stringify(state)) return false;
+    // 서버와 내용이 같아도(이미 동기화된 기기) 한 번짜리 자동 정리는 실행되어야 한다
+    if (JSON.stringify(result.data) === JSON.stringify(state)) { scheduleOneTimeMigrations(); return false; }
     if (isTyping()) { pendingRemote = remoteState; return false; } // apply after the field is left
     pendingRemote = null;
     applyingRemote = true;
@@ -2460,7 +2468,7 @@ datesSorted().forEach(function (d) {
       applyingRemote = false;
     }
     // 방 참여 직후에는 구독(attach)이 applyRemote 뒤에 붙으므로, 비우기(=변경 전파)는 한 틱 뒤에 실행한다.
-    setTimeout(function () { clearTemplateItemsOnce(); migrateTagsOnce(); migrateSubsOnce(); }, 0);
+    scheduleOneTimeMigrations();
     return true;
   }
 
