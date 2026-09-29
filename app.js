@@ -732,6 +732,18 @@
     else if (ar > bar.scrollLeft + bar.clientWidth) bar.scrollLeft = ar - bar.clientWidth + 8;
   }
 
+  // 상세 분류 탭 줄: 다시 그린 뒤 선택된 탭이 보이도록 가로 위치를 맞춘다
+  var renderCategoriesBase = renderCategories;
+  renderCategories = function () {
+    renderCategoriesBase.apply(this, arguments);
+    Array.prototype.forEach.call(document.querySelectorAll('.sub-tabs'), function (bar) {
+      var on = bar.querySelector('.is-active'); if (!on) return;
+      var l = on.offsetLeft - bar.offsetLeft, r = l + on.offsetWidth;
+      if (l < bar.scrollLeft) bar.scrollLeft = Math.max(0, l - 16);
+      else if (r > bar.scrollLeft + bar.clientWidth) bar.scrollLeft = r - bar.clientWidth + 16;
+    });
+  };
+
   function render() {
     var activeKey = focusKeyOf(document.activeElement);
     renderPrimaryTabs();
@@ -919,19 +931,35 @@
 
     html += '<div class="category__body" id="' + bodyId + '"' + (collapsed ? ' hidden' : '') + '>';
     if (ui.editMode) html += renderSubsManager(cat);
-    if (!ui.editMode && subs.length) {
-      var nNone = catItems.filter(function (it) { return !hasSub(cat, it); }).length;
-      html += '<div class="sub-tabs" role="tablist" aria-label="' + escapeHtml(cat.name) + ' 상세 분류">';
-      html += '<button type="button" role="tab" class="sub-tab' + (!subTab ? ' is-active' : '') + '" data-action="sub-tab" data-sub="" data-focus-key="st:' + escapeHtml(cat.id) + ':" aria-selected="' + (!subTab ? 'true' : 'false') + '">전체<b>' + catItems.length + '</b></button>';
-      subs.forEach(function (sb) {
-        var on = subTab === sb.id;
-        var n = catItems.filter(function (it) { return it.sub === sb.id; }).length;
-        html += '<button type="button" role="tab" class="sub-tab' + (on ? ' is-active' : '') + '" data-action="sub-tab" data-sub="' + escapeHtml(sb.id) + '" data-focus-key="st:' + escapeHtml(cat.id) + ':' + escapeHtml(sb.id) + '" aria-selected="' + (on ? 'true' : 'false') + '">' + (sb.icon ? '<span aria-hidden="true">' + escapeHtml(sb.icon) + '</span> ' : '') + escapeHtml(sb.name) + '<b>' + n + '</b></button>';
-      });
-      if (nNone) html += '<button type="button" role="tab" class="sub-tab' + (subTab === '__none' ? ' is-active' : '') + '" data-action="sub-tab" data-sub="__none" data-focus-key="st:' + escapeHtml(cat.id) + ':__none" aria-selected="' + (subTab === '__none' ? 'true' : 'false') + '">미분류<b>' + nNone + '</b></button>';
-      html += '</div>';
-    }
     if (!ui.editMode && catItems.length) {
+      // 필터 줄: 상세 분류(밑줄 탭) + 담당(작은 점 칩). 넓은 화면에서는 한 줄, 좁은 화면에서는 두 줄.
+      var cidE = escapeHtml(cat.id);
+      var filters = '';
+      if (subs.length) {
+        var nNone = catItems.filter(function (it) { return !hasSub(cat, it); }).length;
+        var subBtn = function (key, label, n, on) {
+          return '<button type="button" role="tab" class="sub-tab' + (on ? ' is-active' : '') + '" data-action="sub-tab" data-sub="' + escapeHtml(key) + '" data-focus-key="st:' + cidE + ':' + escapeHtml(key) + '" aria-selected="' + (on ? 'true' : 'false') + '">' + escapeHtml(label) + '<b>' + n + '</b></button>';
+        };
+        filters += '<div class="sub-tabs" role="tablist" aria-label="' + escapeHtml(cat.name) + ' 상세 분류">';
+        filters += subBtn('', '전체', catItems.length, !subTab);
+        subs.forEach(function (sb) {
+          filters += subBtn(sb.id, sb.name, catItems.filter(function (it) { return it.sub === sb.id; }).length, subTab === sb.id);
+        });
+        if (nNone) filters += subBtn('__none', '미분류', nNone, subTab === '__none');
+        filters += '</div>';
+      }
+      var tc = tagCounts(scope);
+      if (tc.order.length) {
+        var tf = tagFilterOf(cat.id);
+        filters += '<div class="tag-chips" role="group" aria-label="' + escapeHtml(cat.name) + ' 담당별 보기"><span class="tag-chips__label" aria-hidden="true">담당</span>';
+        filters += '<button type="button" class="tag-chip tag-chip--all' + (!tf ? ' is-active' : '') + '" data-action="tag-filter" data-tag="" data-focus-key="tf:' + cidE + ':" aria-pressed="' + (!tf ? 'true' : 'false') + '">모두</button>';
+        tc.order.forEach(function (t) {
+          var on = tf === t;
+          filters += '<button type="button" class="tag-chip ' + tagClass(t) + (on ? ' is-active' : '') + '" data-action="tag-filter" data-tag="' + escapeHtml(t) + '" data-focus-key="tf:' + cidE + ':' + escapeHtml(t) + '" aria-pressed="' + (on ? 'true' : 'false') + '">' + escapeHtml(t) + '<b>' + tc.counts[t] + '</b></button>';
+        });
+        filters += '</div>';
+      }
+      if (filters) html += '<div class="cat-filters' + (subs.length ? ' cat-filters--tabs' : '') + '">' + filters + '</div>';
       if (cat.doneTabs) {
         var dt = doneTabOf(cat.id);
         var nAll = scope.filter(function (it) { return !it.excluded; }).length;
@@ -939,18 +967,7 @@
         html += '<div class="done-tabs" role="tablist" aria-label="' + escapeHtml(cat.name) + ' 완료 여부">';
         [['all', '전체', nAll], ['todo', '미완료', nAll - nDone], ['done', '완료', nDone]].forEach(function (o) {
           var on = dt === o[0];
-          html += '<button type="button" role="tab" class="done-tab' + (on ? ' is-active' : '') + '" data-action="done-tab" data-tab="' + o[0] + '" data-focus-key="dt:' + escapeHtml(cat.id) + ':' + o[0] + '" aria-selected="' + (on ? 'true' : 'false') + '">' + o[1] + '<b>' + o[2] + '</b></button>';
-        });
-        html += '</div>';
-      }
-      var tc = tagCounts(scope);
-      if (tc.order.length) {
-        var tf = tagFilterOf(cat.id);
-        html += '<div class="tag-chips" role="group" aria-label="' + escapeHtml(cat.name) + ' 이름별 보기">';
-        html += '<button type="button" class="tag-chip' + (!tf ? ' is-active' : '') + '" data-action="tag-filter" data-tag="" data-focus-key="tf:' + escapeHtml(cat.id) + ':" aria-pressed="' + (!tf ? 'true' : 'false') + '">전체 ' + scope.length + '</button>';
-        tc.order.forEach(function (t) {
-          var on = tf === t;
-          html += '<button type="button" class="tag-chip ' + tagClass(t) + (on ? ' is-active' : '') + '" data-action="tag-filter" data-tag="' + escapeHtml(t) + '" data-focus-key="tf:' + escapeHtml(cat.id) + ':' + escapeHtml(t) + '" aria-pressed="' + (on ? 'true' : 'false') + '">' + escapeHtml(t) + ' ' + tc.counts[t] + '</button>';
+          html += '<button type="button" role="tab" class="done-tab' + (on ? ' is-active' : '') + '" data-action="done-tab" data-tab="' + o[0] + '" data-focus-key="dt:' + cidE + ':' + o[0] + '" aria-selected="' + (on ? 'true' : 'false') + '">' + o[1] + '<b>' + o[2] + '</b></button>';
         });
         html += '</div>';
       }
