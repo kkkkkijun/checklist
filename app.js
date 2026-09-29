@@ -470,7 +470,7 @@
 
   /* ---------- state ---------- */
   var state;
-  var ui = { filter: 'all', editMode: false, pendingUndo: null, undoTimer: null, collapsed: {}, noteForm: null, qtyEdit: null, highlightEdit: false, activeCategory: null, highlightsCollapsed: false, itemEdit: null, view: 'checklist', picksEdit: null, picksActive: 'gpt', dateEdit: null, nameEdit: null, search: '', searchOpen: false, stripOpen: false, onboardingDismissed: false, deviceName: '', autoName: '', toastRemote: true, activity: [], supportEdit: null, memoFocus: null, templateCleared: false, bulkOpen: null, doneTab: {}, tagFilter: {}, tagsMigrated: false, subTab: {}, subsMigrated: false, showSubLabel: false };
+  var ui = { filter: 'all', editMode: false, pendingUndo: null, undoTimer: null, collapsed: {}, noteForm: null, qtyEdit: null, highlightEdit: false, activeCategory: null, highlightsCollapsed: false, itemEdit: null, view: 'checklist', picksEdit: null, picksActive: 'gpt', dateEdit: null, nameEdit: null, search: '', searchOpen: false, stripOpen: false, onboardingDismissed: false, deviceName: '', autoName: '', toastRemote: true, activity: [], supportEdit: null, memoFocus: null, templateCleared: false, bulkOpen: null, doneTab: {}, tagFilter: {}, tagsMigrated: false, subTab: {}, subsMigrated: false, showSubLabel: false, recordTab: 'notes', planTab: 'picks' };
 
   // Active tab (narrow screens): falls back to the first category when the saved one is gone.
   function activeCategoryId() {
@@ -511,6 +511,8 @@
         ui.templateCleared = parsed.templateCleared === true;
         ui.tagsMigrated = parsed.tagsMigrated === true;
         ui.subsMigrated = parsed.subsMigrated === true;
+        if (parsed.recordTab === 'notes' || parsed.recordTab === 'memos') ui.recordTab = parsed.recordTab;
+        if (parsed.planTab === 'picks' || parsed.planTab === 'names') ui.planTab = parsed.planTab;
         if (parsed.subTab && typeof parsed.subTab === 'object') ui.subTab = parsed.subTab;
         if (parsed.doneTab && typeof parsed.doneTab === 'object') ui.doneTab = parsed.doneTab;
         if (parsed.tagFilter && typeof parsed.tagFilter === 'object') ui.tagFilter = parsed.tagFilter;
@@ -536,6 +538,8 @@
         templateCleared: ui.templateCleared,
         tagsMigrated: ui.tagsMigrated,
         subsMigrated: ui.subsMigrated,
+        recordTab: ui.recordTab,
+        planTab: ui.planTab,
         subTab: ui.subTab,
         doneTab: ui.doneTab,
         tagFilter: ui.tagFilter,
@@ -665,6 +669,8 @@
     if (['home','checklist','notes','picks','names','settings','supports','memos'].indexOf(view) === -1) return;
     if (ui.view === view) return;
     ui.view = view;
+    if (view === 'notes' || view === 'memos') ui.recordTab = view;
+    if (view === 'picks' || view === 'names') ui.planTab = view;
     ui.qtyEdit = null;
     ui.itemEdit = null;
     ui.dateEdit = null;
@@ -687,8 +693,17 @@
     if (pkCount) pkCount.textContent = pkFilled ? String(pkFilled) : '';
     var nmCount = $('#ptab-names-count');
     if (nmCount) nmCount.textContent = state.names.length ? String(state.names.length) : '';
+    var group = (ui.view === 'notes' || ui.view === 'memos') ? 'record' : (ui.view === 'picks' || ui.view === 'names') ? 'plan' : '';
+    var counts = { notes: state.notes.length, memos: state.memos.filter(function (m) { return m.text.trim(); }).length, picks: state.dates.length + pkFilled, names: state.names.length };
+    Array.prototype.forEach.call(document.querySelectorAll('.view-switch__btn'), function (b) {
+      var on = b.dataset.target === ui.view;
+      b.classList.toggle('is-active', on);
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+      var c = b.querySelector('[data-count]'); if (c) c.textContent = counts[c.dataset.count] ? String(counts[c.dataset.count]) : '';
+    });
+    var mc = $('#memos-count'); if (mc) mc.textContent = counts.memos ? counts.memos + '개' : '';
     Array.prototype.forEach.call(document.querySelectorAll('.primary-tab'), function (btn) {
-      var active = btn.dataset.view === ui.view;
+      var active = btn.dataset.group ? btn.dataset.group === group : btn.dataset.view === ui.view;
       btn.classList.toggle('is-active', active);
       btn.setAttribute('aria-selected', active ? 'true' : 'false');
       btn.tabIndex = active ? 0 : -1;
@@ -2605,11 +2620,20 @@ datesSorted().forEach(function (d) {
     if (window.ChecklistSync) window.ChecklistSync.onStatus(function () { renderSharePanel(); });
     renderSharePanel();
 
+    document.addEventListener('click', function (e) {
+      var sw = e.target.closest('[data-action="switch-view"]');
+      if (!sw) return;
+      setView(sw.dataset.target);
+      var again = document.querySelector('#view-' + sw.dataset.target + ' .view-switch__btn.is-active'); if (again) again.focus();
+    });
     var ptabs = $('#primary-tabs');
     if (ptabs) {
       ptabs.addEventListener('click', function (e) {
         var btn = e.target.closest('.primary-tab');
-        if (btn) setView(btn.dataset.view);
+        if (!btn) return;
+        if (btn.dataset.group === 'record') setView(ui.recordTab);
+        else if (btn.dataset.group === 'plan') setView(ui.planTab);
+        else setView(btn.dataset.view);
       });
       ptabs.addEventListener('keydown', function (e) {
         if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
@@ -3215,7 +3239,7 @@ datesSorted().forEach(function (d) {
     state = loaded.state;
     loadUiPrefs();
     if (!uiPrefsFound) ui.view = 'home';
-    if (ui.view === 'supports' || ui.view === 'memos') ui.view = 'home';
+    if (ui.view === 'supports') ui.view = 'home';
     bindEvents();
     if (loaded.fresh && storageOk) {
       saveState({ initial: true });

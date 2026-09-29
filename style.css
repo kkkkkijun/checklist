@@ -584,6 +584,14 @@ input[type="number"] { -moz-appearance: textfield; }
 .cat-total__label { font-size: 0.78rem; font-weight: 600; color: #993c1d; min-width: 0; }
 .cat-total__sum { font-size: 1.25rem; font-weight: 800; color: #712b13; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .progress-line__text .sum, #home-progress-text .sum { font-weight: 800; color: #712b13; }
+/* 화면 안 전환 탭 (일지|메모, 택일|작명) */
+.view-switch { display: flex; gap: 4px; padding: 4px; background: #f3e8e0; border-radius: 14px; margin: 6px 0 12px; }
+.view-switch__btn { flex: 1 1 0; min-height: 44px; border: 0; border-radius: 10px; background: transparent; color: var(--muted); font: inherit; font-size: 0.95rem; font-weight: 700; cursor: pointer; }
+.view-switch__btn b { margin-left: 6px; font-weight: 600; font-size: 0.8rem; color: #9a8a7c; }
+.view-switch__btn.is-active { background: #fff; color: var(--peach-strong); box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
+.view-switch__btn.is-active b { color: var(--peach-strong); }
+.view-switch__btn:focus-visible { outline: 3px solid var(--focus); outline-offset: 1px; }
+.bottom-nav .primary-tab { max-width: 130px; }
 /* 상세 분류 탭 */
 .sub-tabs { display: flex; gap: 6px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; margin: 0 -2px 8px; padding: 2px; }
 .sub-tabs::-webkit-scrollbar { display: none; }

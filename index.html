@@ -15,7 +15,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="마미백">
   <meta name="mobile-web-app-capable" content="yes">
-  <link rel="stylesheet" href="./style.css?v=20260929b">
+  <link rel="stylesheet" href="./style.css?v=20260929c">
 </head>
 <body>
   <a class="skip-link" href="#main-area">본문으로 건너뛰기</a>
@@ -132,6 +132,10 @@
 
   <!-- ===== 일지 ===== -->
   <section id="view-notes" class="view notes" role="tabpanel" aria-labelledby="ptab-notes" hidden>
+    <div class="view-switch" data-group="record" role="tablist" aria-label="기록 종류">
+      <button type="button" role="tab" class="view-switch__btn" data-action="switch-view" data-target="notes">🏥 일지<b data-count="notes"></b></button>
+      <button type="button" role="tab" class="view-switch__btn" data-action="switch-view" data-target="memos">📝 메모<b data-count="memos"></b></button>
+    </div>
     <div class="notes__head">
       <h2 id="notes-title" class="notes__title">🏥 산부인과 일지 <span class="notes__count" id="notes-count"></span></h2>
       <button type="button" class="btn btn--primary btn--small" id="add-note-btn">일지 쓰기</button>
@@ -141,6 +145,10 @@
 
   <!-- ===== 택일 ===== -->
   <section id="view-picks" class="view picks" role="tabpanel" aria-labelledby="ptab-picks" hidden>
+    <div class="view-switch" data-group="plan" role="tablist" aria-label="택일·작명">
+      <button type="button" role="tab" class="view-switch__btn" data-action="switch-view" data-target="picks">📅 택일<b data-count="picks"></b></button>
+      <button type="button" role="tab" class="view-switch__btn" data-action="switch-view" data-target="names">✍🏻 작명<b data-count="names"></b></button>
+    </div>
     <div class="datecands__head">
       <h2 class="datecands__title">📅 택일 후보</h2>
       <button type="button" class="btn btn--primary btn--small" id="add-date-btn">후보 추가</button>
@@ -168,7 +176,11 @@
   </section>
 
   <!-- ===== 작명 ===== -->
-  <section id="view-names" class="view names" role="tabpanel" aria-labelledby="ptab-names" hidden>
+  <section id="view-names" class="view names" role="tabpanel" aria-labelledby="ptab-picks" hidden>
+    <div class="view-switch" data-group="plan" role="tablist" aria-label="택일·작명">
+      <button type="button" role="tab" class="view-switch__btn" data-action="switch-view" data-target="picks">📅 택일<b data-count="picks"></b></button>
+      <button type="button" role="tab" class="view-switch__btn" data-action="switch-view" data-target="names">✍🏻 작명<b data-count="names"></b></button>
+    </div>
     <div class="notes__head">
       <h2 class="notes__title">✍🏻 작명 노트 <span class="notes__count" id="name-count"></span></h2>
       <button type="button" class="btn btn--primary btn--small" id="add-name-btn">이름 추가</button>
@@ -177,12 +189,13 @@
   </section>
 
   <!-- ===== 메모 (홈에서 진입) ===== -->
-  <section id="view-memos" class="view memos" role="region" aria-labelledby="memos-title" hidden>
+  <section id="view-memos" class="view memos" role="tabpanel" aria-labelledby="ptab-notes" hidden>
+    <div class="view-switch" data-group="record" role="tablist" aria-label="기록 종류">
+      <button type="button" role="tab" class="view-switch__btn" data-action="switch-view" data-target="notes">🏥 일지<b data-count="notes"></b></button>
+      <button type="button" role="tab" class="view-switch__btn" data-action="switch-view" data-target="memos">📝 메모<b data-count="memos"></b></button>
+    </div>
     <div class="notes__head">
-      <div class="view-back">
-        <button type="button" class="btn btn--small" data-action="go-home" aria-label="홈으로">←</button>
-        <h2 id="memos-title" class="notes__title">📝 메모</h2>
-      </div>
+      <h2 id="memos-title" class="notes__title">📝 메모 <span class="notes__count" id="memos-count"></span></h2>
       <button type="button" class="btn btn--primary btn--small" data-action="new-memo">새 메모</button>
     </div>
     <p class="notice">입력하면 자동으로 저장되고, 가족 공유 중이면 함께 보입니다. 비워 두고 나가면 그 메모는 사라집니다.</p>
@@ -271,20 +284,13 @@
       <span class="primary-tab__label">준비물</span>
       <span class="primary-tab__count" id="ptab-checklist-count"></span>
     </button>
-    <button type="button" class="primary-tab" data-view="notes" role="tab" aria-selected="false" aria-controls="view-notes" id="ptab-notes" tabindex="-1">
-      <span class="primary-tab__icon" aria-hidden="true">🏥</span>
-      <span class="primary-tab__label">일지</span>
-      <span class="primary-tab__count" id="ptab-notes-count"></span>
+    <button type="button" class="primary-tab" data-view="notes" data-group="record" role="tab" aria-selected="false" aria-controls="view-notes" id="ptab-notes" tabindex="-1">
+      <span class="primary-tab__icon" aria-hidden="true">📝</span>
+      <span class="primary-tab__label">일지·메모</span>
     </button>
-    <button type="button" class="primary-tab" data-view="picks" role="tab" aria-selected="false" aria-controls="view-picks" id="ptab-picks" tabindex="-1">
+    <button type="button" class="primary-tab" data-view="picks" data-group="plan" role="tab" aria-selected="false" aria-controls="view-picks" id="ptab-picks" tabindex="-1">
       <span class="primary-tab__icon" aria-hidden="true">📅</span>
-      <span class="primary-tab__label">택일</span>
-      <span class="primary-tab__count" id="ptab-picks-count"></span>
-    </button>
-    <button type="button" class="primary-tab" data-view="names" role="tab" aria-selected="false" aria-controls="view-names" id="ptab-names" tabindex="-1">
-      <span class="primary-tab__icon" aria-hidden="true">✍🏻</span>
-      <span class="primary-tab__label">작명</span>
-      <span class="primary-tab__count" id="ptab-names-count"></span>
+      <span class="primary-tab__label">택일·작명</span>
     </button>
     <button type="button" class="primary-tab" data-view="settings" role="tab" aria-selected="false" aria-controls="view-settings" id="ptab-settings" tabindex="-1">
       <span class="primary-tab__icon" aria-hidden="true">⚙️</span>
@@ -298,9 +304,9 @@
     <button type="button" class="toast__close" id="toast-close" aria-label="알림 닫기">×</button>
   </div>
 
-  <script src="./firebase-config.js?v=20260929b"></script>
-  <script src="./app.js?v=20260929b"></script>
-  <script src="./sync.js?v=20260929b"></script>
+  <script src="./firebase-config.js?v=20260929c"></script>
+  <script src="./app.js?v=20260929c"></script>
+  <script src="./sync.js?v=20260929c"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function () {
