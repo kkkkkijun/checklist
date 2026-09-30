@@ -131,7 +131,7 @@
     doc.dueDate = s.dueDate || '';
     doc.memo = s.memo || '';
     doc.memos = {};
-    (s.memos || []).forEach(function (m, i) { doc.memos[m.id] = { text: m.text || '', updated: m.updated || 0, order: i }; });
+    (s.memos || []).forEach(function (m, i) { doc.memos[m.id] = { text: m.text || '', updated: m.updated || 0, who: m.who || '', fav: !!m.fav, likes: (m.likes && m.likes.length) ? m.likes.slice() : null, comments: (m.comments && m.comments.length) ? m.comments.map(function (c) { return { id: c.id, who: c.who || '', text: c.text || '', t: c.t || 0 }; }) : null, order: i }; });
     doc.supports = {};
     (s.supports || []).forEach(function (x, i) { doc.supports[x.id] = { title: x.title || '', target: x.target || '', benefit: x.benefit || '', howto: x.howto || '', deadline: x.deadline || '', link: x.link || '', status: x.status || 'todo', memo: x.memo || '', order: i }; });
     doc.names = {};
@@ -163,7 +163,7 @@
       highlights: typeof doc.highlights === 'string' ? doc.highlights : '',
       dueDate: typeof doc.dueDate === 'string' ? doc.dueDate : '',
       memo: typeof doc.memo === 'string' ? doc.memo : '',
-      memos: sortedEntries(doc.memos).map(function (m) { return { id: m.id, text: m.text || '', updated: typeof m.updated === 'number' ? m.updated : 0 }; }),
+      memos: sortedEntries(doc.memos).map(function (m) { return { id: m.id, text: m.text || '', updated: typeof m.updated === 'number' ? m.updated : 0, who: m.who || '', fav: m.fav === true, likes: m.likes || [], comments: m.comments || [] }; }),
       supports: sortedEntries(doc.supports).map(function (x) { return { id: x.id, title: x.title || '', target: x.target || '', benefit: x.benefit || '', howto: x.howto || '', deadline: x.deadline || '', link: x.link || '', status: x.status || 'todo', memo: x.memo || '' }; }),
       picks: { gpt: (doc.picks && typeof doc.picks.gpt === 'string') ? doc.picks.gpt : '', claude: (doc.picks && typeof doc.picks.claude === 'string') ? doc.picks.claude : '' }
     };
