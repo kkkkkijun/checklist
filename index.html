@@ -15,7 +15,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="마미백">
   <meta name="mobile-web-app-capable" content="yes">
-  <link rel="stylesheet" href="./style.css?v=20261001b">
+  <link rel="stylesheet" href="./style.css?v=20261001c">
 </head>
 <body>
   <a class="skip-link" href="#main-area">본문으로 건너뛰기</a>
@@ -136,11 +136,14 @@
       <button type="button" role="tab" class="view-switch__btn" data-action="switch-view" data-target="notes">🏥 일지<b data-count="notes"></b></button>
       <button type="button" role="tab" class="view-switch__btn" data-action="switch-view" data-target="memos">📝 메모<b data-count="memos"></b></button>
     </div>
-    <div class="notes__head">
-      <h2 id="notes-title" class="notes__title">🏥 산부인과 일지 <span class="notes__count" id="notes-count"></span></h2>
-      <button type="button" class="btn btn--primary btn--small" id="add-note-btn">일지 쓰기</button>
+    <div id="notes-list-wrap">
+      <div class="notes__head">
+        <h2 id="notes-title" class="notes__title">🏥 산부인과 일지 <span class="notes__count" id="notes-count"></span></h2>
+        <button type="button" class="btn btn--primary btn--small" id="add-note-btn">일지 쓰기</button>
+      </div>
+      <ul class="notes-list" id="notes-list"></ul>
     </div>
-    <ul class="notes-list" id="notes-list"></ul>
+    <div class="memo-detail" id="note-detail" hidden></div>
   </section>
 
   <!-- ===== 택일 ===== -->
@@ -230,6 +233,16 @@
         <input type="date" id="due-date"></div>
     </section>
 
+    <section class="settings-card" id="archive-card" aria-labelledby="archive-title">
+      <h3 id="archive-title" class="settings-card__title">📥 보관함</h3>
+      <p class="settings-card__text">즐겨찾기하거나 좋아요를 누른 일지·메모가 모입니다. 누르면 해당 글로 이동합니다.</p>
+      <div class="archive-tabs" role="tablist" aria-label="보관함 종류">
+        <button type="button" role="tab" class="archive-tab" data-action="archive-tab" data-tab="fav">★ 즐겨찾기<b id="archive-fav-count"></b></button>
+        <button type="button" role="tab" class="archive-tab" data-action="archive-tab" data-tab="like">♥ 좋아요<b id="archive-like-count"></b></button>
+      </div>
+      <ul class="archive-list" id="archive-list"></ul>
+    </section>
+
     <section class="settings-card share" id="share-panel" aria-labelledby="share-title">
       <div class="share__head">
         <h3 id="share-title" class="settings-card__title">👨‍👩‍👧 가족 공유</h3>
@@ -307,9 +320,9 @@
     <button type="button" class="toast__close" id="toast-close" aria-label="알림 닫기">×</button>
   </div>
 
-  <script src="./firebase-config.js?v=20261001b"></script>
-  <script src="./app.js?v=20261001b"></script>
-  <script src="./sync.js?v=20261001b"></script>
+  <script src="./firebase-config.js?v=20261001c"></script>
+  <script src="./app.js?v=20261001c"></script>
+  <script src="./sync.js?v=20261001c"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function () {

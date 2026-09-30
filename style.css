@@ -271,6 +271,30 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .memo-card__fav { flex: 0 0 48px; align-self: stretch; min-height: 48px; border: 0; background: none; font-size: 1.35rem; line-height: 1; color: #cbbfb4; cursor: pointer; border-radius: var(--radius); }
 .memo-card__fav.is-on { color: #e8a317; }
 .memo-card__fav:focus-visible { outline: 3px solid var(--focus); outline-offset: -3px; }
+/* 일지 목록 카드·상세 */
+#view-notes.is-detail .view-switch { display: none; }
+.notes-list .memo-card { min-width: 0; }
+#notes-list-wrap .notes-list { margin-top: 10px; }
+.note-card__date { color: var(--peach-strong); }
+.note-detail__title { margin: 0 0 8px; font-size: 1.1rem; }
+#note-detail .note--editing { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; }
+/* 보관함 (설정) */
+.archive-tabs { display: flex; gap: 4px; padding: 4px; background: #f3e8e0; border-radius: 12px; }
+.archive-tab { flex: 1 1 0; min-height: 40px; border: 0; border-radius: 9px; background: transparent; color: var(--muted); font: inherit; font-size: 0.9rem; font-weight: 700; cursor: pointer; }
+.archive-tab b { margin-left: 5px; font-weight: 600; font-size: 0.78rem; color: #9a8a7c; }
+.archive-tab.is-active { background: #fff; color: var(--peach-strong); box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
+.archive-tab.is-active b { color: var(--peach-strong); }
+.archive-tab:focus-visible, .archive-item:focus-visible { outline: 3px solid var(--focus); outline-offset: 1px; }
+.archive-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.archive-empty { padding: 10px 4px; font-size: 0.88rem; color: var(--muted); }
+.archive-item { width: 100%; display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: #fffdfb; font: inherit; color: var(--text); text-align: left; cursor: pointer; }
+.archive-item:hover { border-color: var(--peach); }
+.archive-item__kind { flex-shrink: 0; font-size: 0.72rem; font-weight: 700; padding: 2px 8px; border-radius: 6px; background: #e6f1fb; color: #0c447c; }
+.archive-item__kind--memo { background: #faeeda; color: #633806; }
+.archive-item__main { flex: 1 1 auto; min-width: 0; display: grid; gap: 1px; }
+.archive-item__title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.archive-item__sub { font-size: 0.76rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.archive-item__chev { flex-shrink: 0; color: var(--muted); font-size: 1.2rem; }
 /* 메모 상세 */
 .memo-detail { display: grid; gap: 12px; }
 .memo-detail[hidden] { display: none; }
