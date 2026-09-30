@@ -490,6 +490,11 @@ input[type="number"] { -moz-appearance: textfield; }
 .inline-form input[type="text"] { flex: 1 1 auto; min-width: 0; min-height: 40px; padding: 6px 12px; font-size: 1rem; }
 .inline-form .btn { min-height: 40px; padding: 0 12px; font-size: 0.9rem; flex-shrink: 0; }
 /* 빠른 추가(목록 위, 항상 표시) + 여러 개 한 번에 */
+.quick-add--sub { flex-wrap: wrap; }
+.quick-add__sub { flex: 1 1 100%; min-width: 0; min-height: 44px; padding: 6px 32px 6px 12px; border: 1px solid var(--border); border-radius: 10px; font-weight: 600; font-size: 1rem; color: var(--text); appearance: none; -webkit-appearance: none;
+  background: var(--card) url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%236f675f' stroke-width='1.8'/%3E%3C/svg%3E") no-repeat right 12px center; }
+.quick-add--sub input[type="text"] { flex: 1 1 120px; }
+@media (min-width: 720px) { .quick-add--sub { flex-wrap: nowrap; } .quick-add__sub { flex: 0 0 210px; } }
 .quick-add { margin: 6px 0 8px; }
 .quick-add input[type="text"] { min-height: 44px; }
 .quick-add .btn { min-height: 44px; }

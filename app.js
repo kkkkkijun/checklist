@@ -470,7 +470,7 @@
 
   /* ---------- state ---------- */
   var state;
-  var ui = { filter: 'all', editMode: false, pendingUndo: null, undoTimer: null, collapsed: {}, noteForm: null, qtyEdit: null, highlightEdit: false, activeCategory: null, highlightsCollapsed: false, itemEdit: null, view: 'checklist', picksEdit: null, picksActive: 'gpt', dateEdit: null, nameEdit: null, search: '', searchOpen: false, stripOpen: false, onboardingDismissed: false, deviceName: '', autoName: '', toastRemote: true, activity: [], supportEdit: null, memoFocus: null, templateCleared: false, bulkOpen: null, doneTab: {}, tagFilter: {}, tagsMigrated: false, subTab: {}, subsMigrated: false, showSubLabel: false, recordTab: 'notes', planTab: 'picks' };
+  var ui = { filter: 'all', editMode: false, pendingUndo: null, undoTimer: null, collapsed: {}, noteForm: null, qtyEdit: null, highlightEdit: false, activeCategory: null, highlightsCollapsed: false, itemEdit: null, view: 'checklist', picksEdit: null, picksActive: 'gpt', dateEdit: null, nameEdit: null, search: '', searchOpen: false, stripOpen: false, onboardingDismissed: false, deviceName: '', autoName: '', toastRemote: true, activity: [], supportEdit: null, memoFocus: null, templateCleared: false, bulkOpen: null, doneTab: {}, tagFilter: {}, tagsMigrated: false, subTab: {}, subsMigrated: false, showSubLabel: false, recordTab: 'notes', planTab: 'picks', addSub: {} };
 
   // Active tab (narrow screens): falls back to the first category when the saved one is gone.
   function activeCategoryId() {
@@ -511,6 +511,7 @@
         ui.templateCleared = parsed.templateCleared === true;
         ui.tagsMigrated = parsed.tagsMigrated === true;
         ui.subsMigrated = parsed.subsMigrated === true;
+        if (parsed.addSub && typeof parsed.addSub === 'object') ui.addSub = parsed.addSub;
         if (parsed.recordTab === 'notes' || parsed.recordTab === 'memos') ui.recordTab = parsed.recordTab;
         if (parsed.planTab === 'picks' || parsed.planTab === 'names') ui.planTab = parsed.planTab;
         if (parsed.subTab && typeof parsed.subTab === 'object') ui.subTab = parsed.subTab;
@@ -539,6 +540,7 @@
         tagsMigrated: ui.tagsMigrated,
         subsMigrated: ui.subsMigrated,
         recordTab: ui.recordTab,
+        addSub: ui.addSub,
         planTab: ui.planTab,
         subTab: ui.subTab,
         doneTab: ui.doneTab,
@@ -973,9 +975,22 @@
       }
     }
     var bulkOpen = ui.bulkOpen === cat.id;
-    html += '<form class="inline-form quick-add" data-action="add-item">';
+    // 추가할 상세 분류: 상세 탭을 골랐으면 그 탭, 아니면 이 분류에서 마지막으로 고른 것
+    var addSubId = '';
+    if (subs.length) {
+      if (subTab && subTab !== '__none') addSubId = subTab;
+      else if (!subTab && ui.addSub[cat.id] && findSub(cat, ui.addSub[cat.id])) addSubId = ui.addSub[cat.id];
+    }
+    html += '<form class="inline-form quick-add' + (subs.length ? ' quick-add--sub' : '') + '" data-action="add-item">';
+    if (subs.length) {
+      html += '<label class="visually-hidden" for="add-sub-' + escapeHtml(cat.id) + '">추가할 상세 분류</label>';
+      html += '<select class="quick-add__sub" id="add-sub-' + escapeHtml(cat.id) + '" data-role="add-sub" data-focus-key="add-sub:' + escapeHtml(cat.id) + '">';
+      html += '<option value=""' + (!addSubId ? ' selected' : '') + '>상세 분류 선택 (미분류)</option>';
+      subs.forEach(function (sb) { html += '<option value="' + escapeHtml(sb.id) + '"' + (addSubId === sb.id ? ' selected' : '') + '>' + escapeHtml(subLabel(sb)) + '</option>'; });
+      html += '</select>';
+    }
     html += '<label class="visually-hidden" for="new-item-' + escapeHtml(cat.id) + '">' + escapeHtml(cat.name) + '에 추가할 준비물</label>';
-    html += '<input type="text" id="new-item-' + escapeHtml(cat.id) + '" data-focus-key="new-item:' + escapeHtml(cat.id) + '" placeholder="' + escapeHtml(subTab && subTab !== '__none' ? '‘' + findSub(cat, subTab).name + '’에 추가 (예: 윤서 물티슈)' : '준비물 (예: 윤서 수유 패드 5,000원)') + '" maxlength="80" autocomplete="off" enterkeyhint="done">';
+    html += '<input type="text" id="new-item-' + escapeHtml(cat.id) + '" data-focus-key="new-item:' + escapeHtml(cat.id) + '" placeholder="준비물 (예: 윤서 수유 패드 5,000원)" maxlength="80" autocomplete="off" enterkeyhint="done">';
     html += '<button type="submit" class="btn btn--primary">추가</button>';
     html += '<button type="button" class="btn quick-add__bulk' + (bulkOpen ? ' is-active' : '') + '" data-action="bulk-toggle" data-focus-key="bulk-toggle:' + escapeHtml(cat.id) + '" aria-expanded="' + (bulkOpen ? 'true' : 'false') + '" aria-controls="bulk-' + escapeHtml(cat.id) + '">여러 개</button>';
     html += '</form>';
@@ -2022,26 +2037,29 @@ datesSorted().forEach(function (d) {
     }
     return { name: t.slice(0, 60), price: null, tags: tp.tags };
   }
-  function currentSubFor(categoryId) {
-    var c = findCategory(categoryId); if (!c || ui.editMode) return '';
-    var st = subTabOf(c); return st && st !== '__none' ? st : '';
+  function chosenAddSub(card) {
+    var c = findCategory(card.dataset.categoryId); if (!c) return '';
+    var sel = card.querySelector('select[data-role="add-sub"]');
+    var v = sel ? sel.value : '';
+    return v && findSub(c, v) ? v : '';
   }
-  function addItem(categoryId, text) {
+  function subNameOf(categoryId, subId) { var c = findCategory(categoryId), sb = c && subId && findSub(c, subId); return sb ? sb.name : ''; }
+  function addItem(categoryId, text, subId) {
     var p = parseItemLine(text);
     if (!p) { showToast('준비물 이름을 입력하세요.'); return false; }
     if (!findCategory(categoryId)) return false;
-    state.items.push({ id: uid(), categoryId: categoryId, name: p.name, price: p.price, tags: p.tags || [], sub: currentSubFor(categoryId), memo: '', done: false, excluded: false });
+    state.items.push({ id: uid(), categoryId: categoryId, name: p.name, price: p.price, tags: p.tags || [], sub: subId || '', memo: '', done: false, excluded: false });
     commit();
     act('add', '‘' + p.name + '’ 추가' + (p.tags && p.tags.length ? ' (' + p.tags.join('+') + ')' : ''));
-    showToast('‘' + p.name + '’ 추가' + (p.tags && p.tags.length ? ' · ' + p.tags.join('+') : '') + (p.price !== null ? ' · ' + formatWon(p.price) : ''));
+    showToast('‘' + p.name + '’ 추가' + (subNameOf(categoryId, subId) ? ' · ' + subNameOf(categoryId, subId) : '') + (p.tags && p.tags.length ? ' · ' + p.tags.join('+') : '') + (p.price !== null ? ' · ' + formatWon(p.price) : ''));
     return true;
   }
-  function addItems(categoryId, text) {
+  function addItems(categoryId, text, subId) {
     if (!findCategory(categoryId)) return 0;
     var added = [];
     String(text || '').split(/\r?\n/).forEach(function (line) {
       var p = parseItemLine(line); if (!p) return;
-      state.items.push({ id: uid(), categoryId: categoryId, name: p.name, price: p.price, tags: p.tags || [], sub: currentSubFor(categoryId), memo: '', done: false, excluded: false });
+      state.items.push({ id: uid(), categoryId: categoryId, name: p.name, price: p.price, tags: p.tags || [], sub: subId || '', memo: '', done: false, excluded: false });
       added.push(p.name);
     });
     if (!added.length) { showToast('추가할 준비물이 없습니다. 한 줄에 하나씩 적어 주세요.'); return 0; }
@@ -3170,10 +3188,11 @@ datesSorted().forEach(function (d) {
       if (bulk) {
         e.preventDefault();
         var bcard = bulk.closest('[data-category-id]');
-        var n = addItems(bcard.dataset.categoryId, $('textarea', bulk).value);
+        var bsub = chosenAddSub(bcard);
+        var n = addItems(bcard.dataset.categoryId, $('textarea', bulk).value, bsub);
         if (n) {
           ui.bulkOpen = null; render();
-          showToast('준비물 ' + n + '개를 추가했습니다.');
+          showToast('준비물 ' + n + '개를 추가했습니다.' + (subNameOf(bcard.dataset.categoryId, bsub) ? ' (' + subNameOf(bcard.dataset.categoryId, bsub) + ')' : ''));
           var qi = document.querySelector('[data-focus-key="new-item:' + bcard.dataset.categoryId + '"]');
           if (qi) qi.focus();
         }
@@ -3184,7 +3203,7 @@ datesSorted().forEach(function (d) {
       e.preventDefault();
       var card = form.closest('[data-category-id]');
       var input = $('input[type="text"]', form);
-      if (addItem(card.dataset.categoryId, input.value)) {
+      if (addItem(card.dataset.categoryId, input.value, chosenAddSub(card))) {
         var again = document.querySelector('[data-focus-key="new-item:' + card.dataset.categoryId + '"]');
         if (again) { again.value = ''; again.focus(); }
       }
@@ -3218,6 +3237,7 @@ datesSorted().forEach(function (d) {
         }
         saveState(); return;
       }
+      if (el.dataset.role === 'add-sub') { ui.addSub[card.dataset.categoryId] = el.value || ''; saveUiPrefs(); var ni = $('input[type="text"]', el.closest('form')); if (ni) ni.focus(); return; }
       if (el.dataset.action === 'toggle-done-tabs') { var dcat = findCategory(card.dataset.categoryId); if (dcat) { dcat.doneTabs = !!el.checked; saveState(); act('category', '분류 ‘' + dcat.name + '’ 완료 탭 ' + (dcat.doneTabs ? '켬' : '끔')); } return; }
       if (el.dataset.field && row) { updateItemField(row.dataset.itemId, el.dataset.field, el, row); }
     });
