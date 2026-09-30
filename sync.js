@@ -125,7 +125,7 @@
     s.items.forEach(function (it, i) {
       doc.items[it.id] = { categoryId: it.categoryId, name: it.name, price: typeof it.price === 'number' ? it.price : null, tags: Array.isArray(it.tags) && it.tags.length ? it.tags.slice() : null, sub: it.sub || '', memo: it.memo || '', done: !!it.done, excluded: !!it.excluded, order: i };
     });
-    s.notes.forEach(function (n) { doc.notes[n.id] = { date: n.date || '', title: n.title || '', body: n.body || '' }; });
+    s.notes.forEach(function (n) { doc.notes[n.id] = { date: n.date || '', title: n.title || '', body: n.body || '', fav: !!n.fav, likes: (n.likes && n.likes.length) ? n.likes.slice() : null, comments: (n.comments && n.comments.length) ? n.comments.map(function (c) { return { id: c.id, who: c.who || '', text: c.text || '', t: c.t || 0 }; }) : null }; });
     doc.dates = {};
     (s.dates || []).forEach(function (d, i) { doc.dates[d.id] = { date: d.date || '', time: d.time || '', label: d.label || '', memo: d.memo || '', order: i }; });
     doc.dueDate = s.dueDate || '';
@@ -157,7 +157,7 @@
       items: sortedEntries(doc.items).map(function (it) {
         return { id: it.id, categoryId: it.categoryId, name: it.name, price: typeof it.price === 'number' ? it.price : null, tags: Array.isArray(it.tags) ? it.tags : (it.tags && typeof it.tags === 'object' ? Object.keys(it.tags).map(function (k) { return it.tags[k]; }) : []), sub: typeof it.sub === 'string' ? it.sub : '', memo: it.memo || '', done: it.done === true, excluded: it.excluded === true };
       }),
-      notes: Object.keys(doc.notes || {}).map(function (id) { var n = doc.notes[id] || {}; return { id: id, date: n.date || '', title: n.title || '', body: n.body || '' }; }),
+      notes: Object.keys(doc.notes || {}).map(function (id) { var n = doc.notes[id] || {}; return { id: id, date: n.date || '', title: n.title || '', body: n.body || '', fav: n.fav === true, likes: n.likes || [], comments: n.comments || [] }; }),
       dates: sortedEntries(doc.dates).map(function (d) { return { id: d.id, date: d.date || '', time: d.time || '', label: d.label || '', memo: d.memo || '' }; }),
       names: sortedEntries(doc.names).map(function (n) { return { id: n.id, name: n.name || '', favorite: n.favorite === true, memo: n.memo || '', hanja: asArr(n.hanja).map(function (h) { return { id: (h && h.id) || '', chars: (h && h.chars) || '', meaning: (h && h.meaning) || '' }; }), dateIds: asArr(n.dateIds).filter(function (x) { return typeof x === 'string'; }) }; }),
       highlights: typeof doc.highlights === 'string' ? doc.highlights : '',

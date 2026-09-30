@@ -312,7 +312,7 @@
         var ntitle = typeof nt.title === 'string' ? nt.title.trim().slice(0, 60) : '';
         var nbody = typeof nt.body === 'string' ? nt.body.replace(/\r\n?/g, '\n').trim().slice(0, NOTE_MAX) : '';
         if (!ntitle && !nbody) return { ok: false, error: (k + 1) + '번째 진료 메모가 비어 있습니다.' };
-        notes.push({ id: nid, date: ndate, title: ntitle, body: nbody });
+        notes.push({ id: nid, date: ndate, title: ntitle, body: nbody, fav: nt.fav === true, likes: normalizeLikes(nt.likes), comments: normalizeComments(nt.comments) });
       }
     }
     var highlights = typeof raw.highlights === 'string' ? cleanHighlights(raw.highlights) : '';
@@ -492,7 +492,7 @@
 
   /* ---------- state ---------- */
   var state;
-  var ui = { filter: 'all', editMode: false, pendingUndo: null, undoTimer: null, collapsed: {}, noteForm: null, qtyEdit: null, highlightEdit: false, activeCategory: null, highlightsCollapsed: false, itemEdit: null, view: 'checklist', picksEdit: null, picksActive: 'gpt', dateEdit: null, nameEdit: null, search: '', searchOpen: false, stripOpen: false, onboardingDismissed: false, deviceName: '', autoName: '', toastRemote: true, activity: [], supportEdit: null, memoFocus: null, templateCleared: false, bulkOpen: null, doneTab: {}, tagFilter: {}, tagsMigrated: false, subTab: {}, subsMigrated: false, showSubLabel: false, recordTab: 'notes', planTab: 'picks', addSub: {}, addSubPick: {}, memoOpen: null, memoEdit: false, memoDraft: '', commentDraft: '' };
+  var ui = { filter: 'all', editMode: false, pendingUndo: null, undoTimer: null, collapsed: {}, noteForm: null, qtyEdit: null, highlightEdit: false, activeCategory: null, highlightsCollapsed: false, itemEdit: null, view: 'checklist', picksEdit: null, picksActive: 'gpt', dateEdit: null, nameEdit: null, search: '', searchOpen: false, stripOpen: false, onboardingDismissed: false, deviceName: '', autoName: '', toastRemote: true, activity: [], supportEdit: null, memoFocus: null, templateCleared: false, bulkOpen: null, doneTab: {}, tagFilter: {}, tagsMigrated: false, subTab: {}, subsMigrated: false, showSubLabel: false, recordTab: 'notes', planTab: 'picks', addSub: {}, addSubPick: {}, memoOpen: null, memoEdit: false, memoDraft: '', commentDraft: '', noteComments: {}, noteCommentDraft: {} };
 
   // Active tab (narrow screens): falls back to the first category when the saved one is gone.
   function activeCategoryId() {
@@ -1221,6 +1221,7 @@
   /* ---------- 진료 메모 ---------- */
   function sortedNotes() {
     return state.notes.slice().sort(function (a, b) {
+      if (!!a.fav !== !!b.fav) return a.fav ? -1 : 1; // 즐겨찾기 먼저
       if (a.date !== b.date) return a.date < b.date ? 1 : -1; // newest first; '' (no date) last
       return 0;
     });
@@ -1262,19 +1263,76 @@
         html += '<li class="note note--editing" data-note-id="' + escapeHtml(n.id) + '">' + noteFormHtml(n) + '</li>';
         return;
       }
-      html += '<li class="note" data-note-id="' + escapeHtml(n.id) + '">';
-      html += '<div class="note__head"><div class="note__meta"><span class="note__date">' + escapeHtml(formatNoteDate(n.date)) + '</span>';
+      html += '<li class="note' + (n.fav ? ' is-fav' : '') + '" data-note-id="' + escapeHtml(n.id) + '">';
+      html += '<div class="note__head"><div class="note__meta"><button type="button" class="note__fav' + (n.fav ? ' is-on' : '') + '" data-action="note-fav" data-focus-key="note-fav:' + escapeHtml(n.id) + '" aria-pressed="' + (n.fav ? 'true' : 'false') + '" aria-label="즐겨찾기' + (n.fav ? ' 해제' : '') + '">' + (n.fav ? '★' : '☆') + '</button><span class="note__date">' + escapeHtml(formatNoteDate(n.date)) + '</span>';
       if (n.title) html += '<span class="note__title">' + escapeHtml(n.title) + '</span>';
       html += '</div><div class="note__actions">';
       html += '<button type="button" class="btn btn--small" data-action="edit-note" data-focus-key="note-edit:' + escapeHtml(n.id) + '" aria-label="' + escapeHtml(formatNoteDate(n.date)) + ' 메모 수정">수정</button>';
       html += '<button type="button" class="btn btn--small btn--danger" data-action="delete-note" data-focus-key="note-del:' + escapeHtml(n.id) + '" aria-label="' + escapeHtml(formatNoteDate(n.date)) + ' 메모 삭제">삭제</button>';
       html += '</div></div>';
       if (n.body) html += '<p class="note__body">' + escapeHtml(n.body) + '</p>';
+      html += noteReactHtml(n);
       html += '</li>';
     });
     list.innerHTML = html;
     $('#notes-count').textContent = notes.length ? notes.length + '개' : '';
     $('#add-note-btn').hidden = ui.noteForm === 'new';
+  }
+
+  // 일지 카드 아래: 좋아요 · 댓글(펼치기)
+  function noteReactHtml(n) {
+    var id = escapeHtml(n.id);
+    var me = myName();
+    var liked = n.likes.indexOf(me) !== -1;
+    var open = !!ui.noteComments[n.id];
+    var h = '<div class="note__react">';
+    h += '<button type="button" class="memo-like memo-like--small' + (liked ? ' is-on' : '') + '" data-action="note-like" data-focus-key="note-like:' + id + '" aria-pressed="' + (liked ? 'true' : 'false') + '"' + (n.likes.length ? ' title="' + escapeHtml(n.likes.join(', ')) + '"' : '') + '>' + (liked ? '♥' : '♡') + ' 좋아요' + (n.likes.length ? ' <b>' + n.likes.length + '</b>' : '') + '</button>';
+    h += '<button type="button" class="memo-like memo-like--small note__cbtn' + (open ? ' is-open' : '') + '" data-action="note-comments" data-focus-key="note-cbtn:' + id + '" aria-expanded="' + (open ? 'true' : 'false') + '">💬 댓글' + (n.comments.length ? ' <b>' + n.comments.length + '</b>' : '') + '</button>';
+    if (n.likes.length) h += '<span class="memo-like__who">' + escapeHtml(n.likes.join(', ')) + '</span>';
+    h += '</div>';
+    if (!open) return h;
+    h += '<section class="memo-comments note__comments" aria-label="댓글">';
+    if (n.comments.length) {
+      h += '<ul class="memo-comments__list">' + n.comments.map(function (c) {
+        return '<li class="memo-comment" data-comment-id="' + escapeHtml(c.id) + '"><div class="memo-comment__head"><span class="memo-comment__who">' + escapeHtml(c.who || '가족') + '</span><span class="memo-comment__time">' + escapeHtml(memoStamp(c.t)) + '</span>' +
+          '<button type="button" class="memo-comment__del" data-action="note-comment-del" aria-label="이 댓글 삭제">×</button></div><p class="memo-comment__text">' + escapeHtml(c.text) + '</p></li>';
+      }).join('') + '</ul>';
+    } else h += '<p class="memo-comments__empty">첫 댓글을 남겨 보세요.</p>';
+    h += '<form class="memo-comments__form" data-action="note-comment"><label class="visually-hidden" for="note-comment-' + id + '">댓글 입력</label>';
+    h += '<input type="text" id="note-comment-' + id + '" data-role="note-comment-input" data-focus-key="note-comment:' + id + '" maxlength="' + COMMENT_MAX + '" placeholder="댓글 달기" autocomplete="off" enterkeyhint="send" value="' + escapeHtml(ui.noteCommentDraft[n.id] || '') + '"><button type="submit" class="btn btn--primary btn--small">등록</button></form></section>';
+    return h;
+  }
+  function findNote(id) { for (var i = 0; i < state.notes.length; i++) if (state.notes[i].id === id) return state.notes[i]; return null; }
+  function noteLabel(n) { return n.title || formatNoteDate(n.date); }
+  function toggleNoteFav(id) {
+    var n = findNote(id); if (!n) return;
+    n.fav = !n.fav; commit();
+    showToast(n.fav ? '즐겨찾기에 추가했습니다. 목록 맨 위에 고정됩니다.' : '즐겨찾기를 해제했습니다.');
+  }
+  function toggleNoteLike(id) {
+    var n = findNote(id); if (!n) return;
+    var me = myName(); var i = n.likes.indexOf(me);
+    if (i === -1) n.likes.push(me); else n.likes.splice(i, 1);
+    commit();
+    if (i === -1) act('note', '일지 ‘' + noteLabel(n) + '’에 좋아요');
+  }
+  function addNoteComment(id, text) {
+    var n = findNote(id); if (!n) return false;
+    var t = String(text || '').replace(/\r\n?/g, '\n').trim().slice(0, COMMENT_MAX);
+    if (!t) { showToast('댓글 내용을 입력하세요.'); return false; }
+    if (n.comments.length >= COMMENTS_PER_MEMO) { showToast('댓글은 일지마다 ' + COMMENTS_PER_MEMO + '개까지 남길 수 있습니다.'); return false; }
+    n.comments.push({ id: uid(), who: myName(), text: t, t: Date.now() });
+    delete ui.noteCommentDraft[id];
+    commit(); act('note', '일지 ‘' + noteLabel(n) + '’에 댓글: ' + t.slice(0, 30));
+    return true;
+  }
+  function deleteNoteComment(id, cid) {
+    var n = findNote(id); if (!n) return;
+    var idx = -1; n.comments.forEach(function (c, i) { if (c.id === cid) idx = i; });
+    if (idx < 0) return;
+    var c = n.comments[idx];
+    n.comments.splice(idx, 1); commit();
+    showToast('댓글을 삭제했습니다.', function () { var nn = findNote(id); if (!nn) return; nn.comments.splice(Math.min(idx, nn.comments.length), 0, c); commit(); showToast('삭제를 취소했습니다.'); });
   }
 
   function readNoteForm(form) {
@@ -1296,7 +1354,7 @@
     }
     var key = form.dataset.noteForm;
     if (key === 'new') {
-      state.notes.push({ id: uid(), date: v.date, title: v.title, body: v.body });
+      state.notes.push({ id: uid(), date: v.date, title: v.title, body: v.body, fav: false, likes: [], comments: [] });
       ui.noteForm = null;
       commit();
       act('note', '일지 ‘' + (v.title || formatNoteDate(v.date)) + '’ 작성');
@@ -2605,7 +2663,7 @@ datesSorted().forEach(function (d) {
     if (el.readOnly || el.disabled) return false; // readonly share-link etc. must not block sync
     if (el.type === 'checkbox' || el.type === 'radio' || el.type === 'file' || el.type === 'button') return false;
     // Only editable fields inside an item/note/highlights editor should defer a remote update.
-    return !!el.closest('.item--edit, .subs-manager, .is-qty-editing, .note-form, #highlights-form, #add-category-form, .pick-form, .date-form, .name-form, .support-form, .memo-detail, #view-settings');
+    return !!el.closest('.item--edit, .subs-manager, .is-qty-editing, .note-form, #highlights-form, #add-category-form, .pick-form, .date-form, .name-form, .support-form, .memo-detail, .note__comments, #view-settings');
   }
 
   var migrationsQueued = false;
@@ -3093,10 +3151,21 @@ datesSorted().forEach(function (d) {
       if (ta) ta.focus();
     });
     notesRoot.addEventListener('submit', function (e) {
+      var cform = e.target.closest('form[data-action="note-comment"]');
+      if (cform) {
+        e.preventDefault();
+        var cid = cform.closest('[data-note-id]').dataset.noteId;
+        if (addNoteComment(cid, $('input', cform).value)) { var again = document.querySelector('[data-focus-key="note-comment:' + cid + '"]'); if (again) again.focus(); }
+        return;
+      }
       var form = e.target.closest('form[data-note-form]');
       if (!form) return;
       e.preventDefault();
       submitNoteForm(form);
+    });
+    notesRoot.addEventListener('input', function (e) {
+      if (e.target.dataset.role !== 'note-comment-input') return;
+      ui.noteCommentDraft[e.target.closest('[data-note-id]').dataset.noteId] = e.target.value;
     });
     notesRoot.addEventListener('click', function (e) {
       var btn = e.target.closest('button[data-action]');
@@ -3111,6 +3180,16 @@ datesSorted().forEach(function (d) {
           break;
         case 'edit-note': ui.noteForm = li.dataset.noteId; renderNotes(); var ta = document.querySelector('[data-focus-key="note-body:' + li.dataset.noteId + '"]'); if (ta) ta.focus(); break;
         case 'delete-note': deleteNote(li.dataset.noteId); break;
+        case 'note-fav': toggleNoteFav(li.dataset.noteId); break;
+        case 'note-like': toggleNoteLike(li.dataset.noteId); break;
+        case 'note-comments': {
+          var nid = li.dataset.noteId;
+          if (ui.noteComments[nid]) delete ui.noteComments[nid]; else ui.noteComments[nid] = true;
+          renderNotes();
+          var f = document.querySelector('[data-focus-key="' + (ui.noteComments[nid] ? 'note-comment:' : 'note-cbtn:') + nid + '"]'); if (f) f.focus();
+          break;
+        }
+        case 'note-comment-del': deleteNoteComment(li.dataset.noteId, btn.closest('[data-comment-id]').dataset.commentId); break;
       }
     });
 

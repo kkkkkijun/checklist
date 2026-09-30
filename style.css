@@ -885,6 +885,15 @@ input[type="number"] { -moz-appearance: textfield; }
   box-shadow: var(--shadow); padding: 12px 14px; min-width: 0;
 }
 .note--editing { grid-column: 1 / -1; background: #fffdfb; }
+.note.is-fav { border-color: #f1c77a; background: #fffaf0; }
+.note__meta { align-items: center; }
+.note__fav { min-width: 36px; min-height: 36px; margin: -6px 0 -6px -8px; border: 0; background: none; font-size: 1.25rem; line-height: 1; color: #cbbfb4; cursor: pointer; border-radius: 50%; }
+.note__fav.is-on { color: #e8a317; }
+.note__fav:focus-visible { outline: 3px solid var(--focus); outline-offset: -2px; }
+.note__react { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border); }
+.memo-like--small { min-height: 36px; padding: 0 12px; font-size: 0.84rem; }
+.note__cbtn.is-open { background: var(--peach-soft); border-color: var(--peach-strong); color: var(--peach-strong); }
+.note__comments { margin-top: 8px; border: 0; padding: 0; background: none; }
 .note__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
 .note__meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; min-width: 0; }
 .note__date { font-weight: 700; }
