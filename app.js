@@ -470,7 +470,7 @@
 
   /* ---------- state ---------- */
   var state;
-  var ui = { filter: 'all', editMode: false, pendingUndo: null, undoTimer: null, collapsed: {}, noteForm: null, qtyEdit: null, highlightEdit: false, activeCategory: null, highlightsCollapsed: false, itemEdit: null, view: 'checklist', picksEdit: null, picksActive: 'gpt', dateEdit: null, nameEdit: null, search: '', searchOpen: false, stripOpen: false, onboardingDismissed: false, deviceName: '', autoName: '', toastRemote: true, activity: [], supportEdit: null, memoFocus: null, templateCleared: false, bulkOpen: null, doneTab: {}, tagFilter: {}, tagsMigrated: false, subTab: {}, subsMigrated: false, showSubLabel: false, recordTab: 'notes', planTab: 'picks', addSub: {} };
+  var ui = { filter: 'all', editMode: false, pendingUndo: null, undoTimer: null, collapsed: {}, noteForm: null, qtyEdit: null, highlightEdit: false, activeCategory: null, highlightsCollapsed: false, itemEdit: null, view: 'checklist', picksEdit: null, picksActive: 'gpt', dateEdit: null, nameEdit: null, search: '', searchOpen: false, stripOpen: false, onboardingDismissed: false, deviceName: '', autoName: '', toastRemote: true, activity: [], supportEdit: null, memoFocus: null, templateCleared: false, bulkOpen: null, doneTab: {}, tagFilter: {}, tagsMigrated: false, subTab: {}, subsMigrated: false, showSubLabel: false, recordTab: 'notes', planTab: 'picks', addSub: {}, addSubPick: {} };
 
   // Active tab (narrow screens): falls back to the first category when the saved one is gone.
   function activeCategoryId() {
@@ -978,15 +978,17 @@
     // 추가할 상세 분류: 상세 탭을 골랐으면 그 탭, 아니면 이 분류에서 마지막으로 고른 것
     var addSubId = '';
     if (subs.length) {
-      if (subTab && subTab !== '__none') addSubId = subTab;
+      if (ui.addSubPick[cat.id] && findSub(cat, ui.addSubPick[cat.id])) addSubId = ui.addSubPick[cat.id];
+      else if (subTab && subTab !== '__none') addSubId = subTab;
       else if (!subTab && ui.addSub[cat.id] && findSub(cat, ui.addSub[cat.id])) addSubId = ui.addSub[cat.id];
     }
-    html += '<form class="inline-form quick-add' + (subs.length ? ' quick-add--sub' : '') + '" data-action="add-item">';
-    if (subs.length) {
+    html += '<form class="inline-form quick-add quick-add--sub" data-action="add-item">';
+    if (true) {
       html += '<label class="visually-hidden" for="add-sub-' + escapeHtml(cat.id) + '">추가할 상세 분류</label>';
       html += '<select class="quick-add__sub" id="add-sub-' + escapeHtml(cat.id) + '" data-role="add-sub" data-focus-key="add-sub:' + escapeHtml(cat.id) + '">';
       html += '<option value=""' + (!addSubId ? ' selected' : '') + '>상세 분류 선택 (미분류)</option>';
       subs.forEach(function (sb) { html += '<option value="' + escapeHtml(sb.id) + '"' + (addSubId === sb.id ? ' selected' : '') + '>' + escapeHtml(subLabel(sb)) + '</option>'; });
+      if (subs.length < SUB_MAX) html += '<option value="__new">＋ 새 상세 분류 만들기…</option>';
       html += '</select>';
     }
     html += '<label class="visually-hidden" for="new-item-' + escapeHtml(cat.id) + '">' + escapeHtml(cat.name) + '에 추가할 준비물</label>';
@@ -1056,9 +1058,10 @@
     name = name.slice(0, SUB_NAME_MAX);
     if (subsOf(cat).some(function (x) { return x.name === name; })) { showToast('같은 이름의 상세 분류가 이미 있습니다.'); return false; }
     if (!cat.subs) cat.subs = [];
-    cat.subs.push({ id: uid(), name: name, icon: icon });
+    var newId = uid();
+    cat.subs.push({ id: newId, name: name, icon: icon });
     commit(); act('category', '‘' + cat.name + '’에 상세 분류 ‘' + name + '’ 추가');
-    return true;
+    return newId;
   }
   function deleteSub(catId, subId) {
     var cat = findCategory(catId); var sb = cat && findSub(cat, subId); if (!sb) return;
@@ -2041,7 +2044,7 @@ datesSorted().forEach(function (d) {
     var c = findCategory(card.dataset.categoryId); if (!c) return '';
     var sel = card.querySelector('select[data-role="add-sub"]');
     var v = sel ? sel.value : '';
-    return v && findSub(c, v) ? v : '';
+    return v && v !== '__new' && findSub(c, v) ? v : '';
   }
   function subNameOf(categoryId, subId) { var c = findCategory(categoryId), sb = c && subId && findSub(c, subId); return sb ? sb.name : ''; }
   function addItem(categoryId, text, subId) {
@@ -3103,7 +3106,7 @@ datesSorted().forEach(function (d) {
         case 'delete-category': deleteCategory(card.dataset.categoryId); break;
         case 'sub-tab': {
           var scid2 = card.dataset.categoryId;
-          ui.subTab[scid2] = btn.dataset.sub || ''; ui.tagFilter[scid2] = ''; saveUiPrefs();
+          ui.subTab[scid2] = btn.dataset.sub || ''; ui.tagFilter[scid2] = ''; delete ui.addSubPick[scid2]; saveUiPrefs();
           renderCategories();
           var sbtn = document.querySelector('[data-focus-key="st:' + scid2 + ':' + (btn.dataset.sub || '') + '"]'); if (sbtn) { sbtn.focus(); if (sbtn.scrollIntoView) sbtn.scrollIntoView({ block: 'nearest', inline: 'center' }); }
           break;
@@ -3237,7 +3240,23 @@ datesSorted().forEach(function (d) {
         }
         saveState(); return;
       }
-      if (el.dataset.role === 'add-sub') { ui.addSub[card.dataset.categoryId] = el.value || ''; saveUiPrefs(); var ni = $('input[type="text"]', el.closest('form')); if (ni) ni.focus(); return; }
+      if (el.dataset.role === 'add-sub') {
+        var acid = card.dataset.categoryId;
+        if (el.value === '__new') {
+          // 목록에 없는 상세 분류를 그 자리에서 만든다
+          var typed = $('input[type="text"]', el.closest('form')).value;
+          var nm = window.prompt('새 상세 분류 이름을 입력하세요.\n앞에 이모지를 붙이면 아이콘이 됩니다 (예: 🍼 수유)', '');
+          var made = nm && nm.trim() ? addSub(acid, nm) : '';
+          if (made) { ui.addSub[acid] = made; ui.addSubPick[acid] = made; saveUiPrefs(); showToast('상세 분류를 만들었습니다: ' + subNameOf(acid, made) + '. 이어서 준비물을 추가하세요.'); }
+          renderCategories();
+          var ni2 = document.querySelector('[data-focus-key="new-item:' + acid + '"]');
+          if (ni2) { ni2.value = typed; ni2.focus(); }
+          return;
+        }
+        ui.addSub[acid] = el.value || ''; ui.addSubPick[acid] = el.value || ''; saveUiPrefs();
+        var ni = $('input[type="text"]', el.closest('form')); if (ni) ni.focus();
+        return;
+      }
       if (el.dataset.action === 'toggle-done-tabs') { var dcat = findCategory(card.dataset.categoryId); if (dcat) { dcat.doneTabs = !!el.checked; saveState(); act('category', '분류 ‘' + dcat.name + '’ 완료 탭 ' + (dcat.doneTabs ? '켬' : '끔')); } return; }
       if (el.dataset.field && row) { updateItemField(row.dataset.itemId, el.dataset.field, el, row); }
     });
