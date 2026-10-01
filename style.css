@@ -271,6 +271,28 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .memo-card__fav { flex: 0 0 48px; align-self: stretch; min-height: 48px; border: 0; background: none; font-size: 1.35rem; line-height: 1; color: #cbbfb4; cursor: pointer; border-radius: var(--radius); }
 .memo-card__fav.is-on { color: #e8a317; }
 .memo-card__fav:focus-visible { outline: 3px solid var(--focus); outline-offset: -3px; }
+/* 메모 안의 표 */
+.mtables { display: grid; gap: 12px; }
+.mtables__add { justify-self: start; }
+.mtables__hint { margin: 0; font-size: 0.82rem; color: var(--muted); }
+.mtable { display: grid; gap: 6px; min-width: 0; }
+.mtable__scroll { overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; max-width: 100%; padding: 0 12px 12px 0; }
+.mtable table { border-collapse: collapse; table-layout: fixed; background: #fff; }
+.mtable td { position: relative; padding: 0; vertical-align: top; border: 1px solid #eadfd6; }
+.mtable tr:first-child td { background: #faf4ef; font-weight: 700; }
+.mtable td.is-sel { box-shadow: inset 0 0 0 2px var(--peach-strong); }
+.mtable__cell { box-sizing: border-box; padding: 8px 10px; outline: none; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.45; font-size: 1rem; cursor: text; }
+.mtable__colgrip { position: absolute; top: 0; right: -6px; width: 12px; height: 100%; cursor: col-resize; touch-action: none; z-index: 2; }
+.mtable__rowgrip { position: absolute; left: 0; bottom: -6px; width: 100%; height: 12px; cursor: row-resize; touch-action: none; z-index: 1; }
+.mtable__colgrip::after { content: ''; position: absolute; top: 0; bottom: 0; left: 5px; width: 2px; background: transparent; }
+.mtable__rowgrip::after { content: ''; position: absolute; left: 0; right: 0; top: 5px; height: 2px; background: transparent; }
+.mtable__colgrip:hover::after, .mtable.is-col-resizing .mtable__colgrip::after { background: rgba(217, 113, 79, 0.55); }
+.mtable__rowgrip:hover::after, .mtable.is-row-resizing .mtable__rowgrip::after { background: rgba(217, 113, 79, 0.55); }
+.mtable.is-col-resizing, .mtable.is-row-resizing { user-select: none; -webkit-user-select: none; }
+@media (pointer: coarse) { .mtable__colgrip { right: -11px; width: 22px; } .mtable__colgrip::after { left: 10px; } .mtable__rowgrip { bottom: -9px; height: 18px; } .mtable__rowgrip::after { top: 8px; } }
+.mtable__tools { display: flex; flex-wrap: wrap; gap: 6px; }
+.mtable__tools .btn[disabled] { opacity: 0.45; cursor: default; }
+.mtable__hint { margin: 0; font-size: 0.76rem; color: var(--muted); line-height: 1.45; }
 /* 일지 목록 카드·상세 */
 #view-notes.is-detail .view-switch { display: none; }
 .notes-list .memo-card { min-width: 0; }

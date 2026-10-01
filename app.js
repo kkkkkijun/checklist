@@ -124,6 +124,33 @@
     try { el.setSelectionRange(pos, pos); } catch (e) { /* ignore */ }
   }
 
+  /* ---------- 메모의 표 ---------- */
+  var TABLES_PER_MEMO = 5, TABLE_ROWS_MAX = 30, TABLE_COLS_MAX = 8, CELL_MAX = 300;
+  var COL_W_MIN = 60, COL_W_MAX = 600, COL_W_DEFAULT = 130, ROW_H_MIN = 36, ROW_H_MAX = 300;
+  function clampNum(v, lo, hi, dflt) { var n = typeof v === 'number' && isFinite(v) ? Math.round(v) : dflt; return Math.max(lo, Math.min(hi, n)); }
+  function normalizeTables(raw) {
+    var out = [], seen = {};
+    listOf(raw).forEach(function (t) {
+      if (!t || typeof t !== 'object' || out.length >= TABLES_PER_MEMO) return;
+      var id = typeof t.id === 'string' ? t.id.trim().slice(0, 60) : '';
+      if (!id || seen[id]) return;
+      var rows = listOf(t.rows).slice(0, TABLE_ROWS_MAX).map(function (r) {
+        return listOf(r).slice(0, TABLE_COLS_MAX).map(function (c) { return typeof c === 'string' ? c.replace(/\r\n?/g, '\n').slice(0, CELL_MAX) : ''; });
+      });
+      if (!rows.length) return;
+      var nCols = Math.max.apply(null, rows.map(function (r) { return r.length; }).concat([1]));
+      nCols = Math.min(TABLE_COLS_MAX, nCols);
+      rows.forEach(function (r) { while (r.length < nCols) r.push(''); });
+      var colsRaw = listOf(t.cols), rowHRaw = listOf(t.rowH);
+      var cols = [], rowH = [];
+      for (var i = 0; i < nCols; i++) cols.push(clampNum(colsRaw[i], COL_W_MIN, COL_W_MAX, COL_W_DEFAULT));
+      for (var j = 0; j < rows.length; j++) rowH.push(clampNum(rowHRaw[j], ROW_H_MIN, ROW_H_MAX, ROW_H_MIN));
+      seen[id] = true;
+      out.push({ id: id, cols: cols, rowH: rowH, rows: rows });
+    });
+    return out;
+  }
+
   /* ---------- 메모의 좋아요·댓글 정리 ---------- */
   var COMMENT_MAX = 300, COMMENTS_PER_MEMO = 50;
   function listOf(raw) { return Array.isArray(raw) ? raw : (raw && typeof raw === 'object' ? Object.keys(raw).map(function (k) { return raw[k]; }) : []); }
@@ -383,10 +410,10 @@
         var mtext = typeof mm.text === 'string' ? mm.text.replace(/\r\n?/g, '\n').slice(0, MEMO_MAX) : '';
         if (!mid || !mtext.trim() || seenMemo[mid]) continue; // empty or duplicate memos are dropped
         seenMemo[mid] = true;
-        memos.push({ id: mid, text: mtext, updated: typeof mm.updated === 'number' ? mm.updated : 0, who: typeof mm.who === 'string' ? mm.who.trim().slice(0, 12) : '', fav: mm.fav === true, likes: normalizeLikes(mm.likes), comments: normalizeComments(mm.comments) });
+        memos.push({ id: mid, text: mtext, updated: typeof mm.updated === 'number' ? mm.updated : 0, who: typeof mm.who === 'string' ? mm.who.trim().slice(0, 12) : '', fav: mm.fav === true, likes: normalizeLikes(mm.likes), comments: normalizeComments(mm.comments), tables: normalizeTables(mm.tables) });
       }
     }
-    if (memo.trim() && !seenMemo['legacy-memo']) { memos.push({ id: 'legacy-memo', text: memo, updated: 0, who: '', fav: false, likes: [], comments: [] }); }
+    if (memo.trim() && !seenMemo['legacy-memo']) { memos.push({ id: 'legacy-memo', text: memo, updated: 0, who: '', fav: false, likes: [], comments: [], tables: [] }); }
     memo = '';
 
     // 정부 지원 체크리스트
@@ -492,7 +519,7 @@
 
   /* ---------- state ---------- */
   var state;
-  var ui = { filter: 'all', editMode: false, pendingUndo: null, undoTimer: null, collapsed: {}, noteForm: null, qtyEdit: null, highlightEdit: false, activeCategory: null, highlightsCollapsed: false, itemEdit: null, view: 'checklist', picksEdit: null, picksActive: 'gpt', dateEdit: null, nameEdit: null, search: '', searchOpen: false, stripOpen: false, onboardingDismissed: false, deviceName: '', autoName: '', toastRemote: true, activity: [], supportEdit: null, memoFocus: null, templateCleared: false, bulkOpen: null, doneTab: {}, tagFilter: {}, tagsMigrated: false, subTab: {}, subsMigrated: false, showSubLabel: false, recordTab: 'notes', planTab: 'picks', addSub: {}, addSubPick: {}, memoOpen: null, memoEdit: false, memoDraft: '', commentDraft: '', noteComments: {}, noteCommentDraft: {}, noteOpen: null, detailFrom: null, archiveTab: 'fav', rxOpen: {}, rxDraft: {} };
+  var ui = { filter: 'all', editMode: false, pendingUndo: null, undoTimer: null, collapsed: {}, noteForm: null, qtyEdit: null, highlightEdit: false, activeCategory: null, highlightsCollapsed: false, itemEdit: null, view: 'checklist', picksEdit: null, picksActive: 'gpt', dateEdit: null, nameEdit: null, search: '', searchOpen: false, stripOpen: false, onboardingDismissed: false, deviceName: '', autoName: '', toastRemote: true, activity: [], supportEdit: null, memoFocus: null, templateCleared: false, bulkOpen: null, doneTab: {}, tagFilter: {}, tagsMigrated: false, subTab: {}, subsMigrated: false, showSubLabel: false, recordTab: 'notes', planTab: 'picks', addSub: {}, addSubPick: {}, memoOpen: null, memoEdit: false, memoDraft: '', commentDraft: '', tableSel: null, noteComments: {}, noteCommentDraft: {}, noteOpen: null, detailFrom: null, archiveTab: 'fav', rxOpen: {}, rxDraft: {} };
 
   // Active tab (narrow screens): falls back to the first category when the saved one is gone.
   function activeCategoryId() {
@@ -1941,7 +1968,7 @@ datesSorted().forEach(function (d) {
     if (m.who) parts.push(escapeHtml(m.who));
     if (m.updated) parts.push(escapeHtml(memoStamp(m.updated)));
     var h = '<span class="memo-card__by">' + parts.join(' · ') + '</span>';
-    h += '<span class="memo-card__counts">' + (m.likes.length ? '<span class="memo-count memo-count--like">♥ ' + m.likes.length + '</span>' : '') + (m.comments.length ? '<span class="memo-count">💬 ' + m.comments.length + '</span>' : '') + '</span>';
+    h += '<span class="memo-card__counts">' + (m.likes.length ? '<span class="memo-count memo-count--like">♥ ' + m.likes.length + '</span>' : '') + (m.comments.length ? '<span class="memo-count">💬 ' + m.comments.length + '</span>' : '') + (m.tables.length ? '<span class="memo-count">▦ ' + m.tables.length + '</span>' : '') + '</span>';
     return h;
   }
   function renderMemo() {
@@ -1989,12 +2016,14 @@ datesSorted().forEach(function (d) {
       h += '<label class="visually-hidden" for="memo-edit-input">메모 내용</label>';
       h += '<textarea class="memo-detail__input" id="memo-edit-input" data-focus-key="memo-edit" maxlength="' + MEMO_MAX + '" placeholder="내용을 입력하세요. 첫 줄이 제목처럼 보입니다.">' + escapeHtml(ui.memoDraft) + '</textarea>';
       h += '<div class="memo-detail__editbar"><button type="button" class="btn btn--primary" data-action="memo-save" data-focus-key="memo-save">저장</button><button type="button" class="btn" data-action="memo-cancel" data-focus-key="memo-cancel">취소</button></div>';
+      if (!isNew) h += memoTablesHtml(m); else h += '<p class="mtables__hint">표는 메모를 저장한 뒤에 추가할 수 있습니다.</p>';
       return h;
     }
     var me = myName();
     var liked = m.likes.indexOf(me) !== -1;
     h += '<article class="memo-detail__body"><p class="memo-detail__meta">' + [m.who ? escapeHtml(m.who) : '', m.updated ? '수정 ' + escapeHtml(memoStamp(m.updated)) : ''].filter(Boolean).join(' · ') + '</p>';
     h += '<div class="memo-detail__text">' + escapeHtml(m.text) + '</div></article>';
+    h += memoTablesHtml(m);
     h += '<div class="memo-detail__react"><button type="button" class="memo-like' + (liked ? ' is-on' : '') + '" data-action="memo-like" data-focus-key="memo-like" aria-pressed="' + (liked ? 'true' : 'false') + '">' + (liked ? '♥' : '♡') + ' 좋아요' + (m.likes.length ? ' <b>' + m.likes.length + '</b>' : '') + '</button>';
     if (m.likes.length) h += '<span class="memo-like__who">' + escapeHtml(m.likes.join(', ')) + '</span>';
     h += '</div>';
@@ -2009,6 +2038,94 @@ datesSorted().forEach(function (d) {
     h += '<input type="text" id="memo-comment-input" data-focus-key="memo-comment" maxlength="' + COMMENT_MAX + '" placeholder="댓글 달기" autocomplete="off" enterkeyhint="send" value="' + escapeHtml(ui.commentDraft) + '"><button type="submit" class="btn btn--primary btn--small">등록</button></form></section>';
     return h;
   }
+  // 표: 셀은 그 자리에서 고치고, 선(손잡이)을 끌어 열 너비·행 높이를 조절한다
+  function memoTablesHtml(m) {
+    var h = '<section class="mtables" aria-label="표">';
+    m.tables.forEach(function (t, ti) {
+      var tid = escapeHtml(t.id);
+      var total = t.cols.reduce(function (a, b) { return a + b; }, 0);
+      var sel = ui.tableSel && ui.tableSel.t === t.id ? ui.tableSel : null;
+      h += '<div class="mtable" data-table-id="' + tid + '"><div class="mtable__scroll"><table style="width:' + total + 'px" aria-label="표 ' + (ti + 1) + '"><colgroup>' + t.cols.map(function (w) { return '<col style="width:' + w + 'px">'; }).join('') + '</colgroup><tbody>';
+      t.rows.forEach(function (row, r) {
+        h += '<tr>' + row.map(function (cell, c) {
+          var on = sel && sel.r === r && sel.c === c;
+          return '<td class="' + (on ? 'is-sel' : '') + '"><div class="mtable__cell" contenteditable="true" role="textbox" aria-multiline="true" aria-label="' + (r + 1) + '행 ' + (c + 1) + '열" data-r="' + r + '" data-c="' + c + '" data-focus-key="cell:' + tid + ':' + r + ':' + c + '" style="min-height:' + t.rowH[r] + 'px">' + escapeHtml(cell) + '</div>' +
+            '<span class="mtable__colgrip" data-grip="col" data-i="' + c + '" aria-hidden="true"></span><span class="mtable__rowgrip" data-grip="row" data-i="' + r + '" aria-hidden="true"></span></td>';
+        }).join('') + '</tr>';
+      });
+      h += '</tbody></table></div>';
+      h += '<div class="mtable__tools"><button type="button" class="btn btn--small" data-action="table-row-add"' + (t.rows.length >= TABLE_ROWS_MAX ? ' disabled' : '') + '>＋ 행</button>';
+      h += '<button type="button" class="btn btn--small" data-action="table-col-add"' + (t.cols.length >= TABLE_COLS_MAX ? ' disabled' : '') + '>＋ 열</button>';
+      h += '<button type="button" class="btn btn--small" data-action="table-row-del"' + (t.rows.length <= 1 ? ' disabled' : '') + '>행 삭제</button>';
+      h += '<button type="button" class="btn btn--small" data-action="table-col-del"' + (t.cols.length <= 1 ? ' disabled' : '') + '>열 삭제</button>';
+      h += '<button type="button" class="btn btn--small btn--danger" data-action="table-del">표 삭제</button></div>';
+      h += '<p class="mtable__hint">칸을 눌러 바로 입력합니다. 칸 사이의 선을 끌면 열 너비·행 높이가 바뀌고, 행·열 삭제는 마지막으로 누른 칸 기준입니다.</p></div>';
+    });
+    if (m.tables.length < TABLES_PER_MEMO) h += '<button type="button" class="btn btn--small mtables__add" data-action="table-add" data-focus-key="table-add">▦ 표 추가</button>';
+    h += '</section>';
+    return h;
+  }
+  function findTable(m, tid) { for (var i = 0; i < m.tables.length; i++) if (m.tables[i].id === tid) return m.tables[i]; return null; }
+  function touchMemo(m) { m.updated = Date.now(); }
+  function addMemoTable(id) {
+    var m = findMemo(id); if (!m) return;
+    if (m.tables.length >= TABLES_PER_MEMO) { showToast('표는 메모마다 ' + TABLES_PER_MEMO + '개까지 넣을 수 있습니다.'); return; }
+    var t = { id: uid(), cols: [COL_W_DEFAULT, COL_W_DEFAULT, COL_W_DEFAULT], rowH: [ROW_H_MIN, ROW_H_MIN, ROW_H_MIN], rows: [['', '', ''], ['', '', ''], ['', '', '']] };
+    m.tables.push(t); touchMemo(m);
+    ui.tableSel = { t: t.id, r: 0, c: 0 };
+    commit(); act('memo', '메모에 표 추가: ' + (memoLines(m)[0] || '').slice(0, 30));
+    var first = document.querySelector('[data-focus-key="cell:' + t.id + ':0:0"]'); if (first) first.focus();
+  }
+  function selIn(t) { return ui.tableSel && ui.tableSel.t === t.id ? ui.tableSel : null; }
+  function tableAction(id, tid, action) {
+    var m = findMemo(id); var t = m && findTable(m, tid); if (!t) return;
+    var sel = selIn(t);
+    var r = sel ? Math.min(sel.r, t.rows.length - 1) : t.rows.length - 1;
+    var c = sel ? Math.min(sel.c, t.cols.length - 1) : t.cols.length - 1;
+    var focusKey = null;
+    switch (action) {
+      case 'table-row-add':
+        if (t.rows.length >= TABLE_ROWS_MAX) return;
+        t.rows.splice(r + 1, 0, t.cols.map(function () { return ''; })); t.rowH.splice(r + 1, 0, ROW_H_MIN);
+        ui.tableSel = { t: t.id, r: r + 1, c: c }; focusKey = 'cell:' + t.id + ':' + (r + 1) + ':' + c; break;
+      case 'table-col-add':
+        if (t.cols.length >= TABLE_COLS_MAX) return;
+        t.rows.forEach(function (row) { row.splice(c + 1, 0, ''); }); t.cols.splice(c + 1, 0, COL_W_DEFAULT);
+        ui.tableSel = { t: t.id, r: r, c: c + 1 }; focusKey = 'cell:' + t.id + ':' + r + ':' + (c + 1); break;
+      case 'table-row-del': {
+        if (t.rows.length <= 1) return;
+        if (t.rows[r].some(function (x) { return x.trim(); }) && !window.confirm((r + 1) + '번째 행에 내용이 있습니다. 삭제할까요?')) return;
+        t.rows.splice(r, 1); t.rowH.splice(r, 1);
+        ui.tableSel = { t: t.id, r: Math.min(r, t.rows.length - 1), c: c }; break;
+      }
+      case 'table-col-del': {
+        if (t.cols.length <= 1) return;
+        if (t.rows.some(function (row) { return row[c].trim(); }) && !window.confirm((c + 1) + '번째 열에 내용이 있습니다. 삭제할까요?')) return;
+        t.rows.forEach(function (row) { row.splice(c, 1); }); t.cols.splice(c, 1);
+        ui.tableSel = { t: t.id, r: r, c: Math.min(c, t.cols.length - 1) }; break;
+      }
+      case 'table-del': {
+        var filled = t.rows.some(function (row) { return row.some(function (x) { return x.trim(); }); });
+        if (filled && !window.confirm('이 표를 삭제할까요?')) return;
+        var idx = m.tables.indexOf(t);
+        m.tables.splice(idx, 1); ui.tableSel = null; touchMemo(m); commit();
+        showToast('표를 삭제했습니다.', function () { var mm = findMemo(id); if (!mm) return; mm.tables.splice(Math.min(idx, mm.tables.length), 0, t); commit(); showToast('삭제를 취소했습니다.'); });
+        return;
+      }
+      default: return;
+    }
+    touchMemo(m); commit();
+    if (focusKey) { var f = document.querySelector('[data-focus-key="' + focusKey + '"]'); if (f) f.focus(); }
+  }
+  // 셀 내용 저장(다시 그리지 않는다: 다른 칸을 누르는 도중 화면이 바뀌면 포커스를 잃는다)
+  function saveTableCell(id, tid, r, c, text) {
+    var m = findMemo(id); var t = m && findTable(m, tid); if (!t || !t.rows[r] || t.rows[r][c] === undefined) return;
+    var v = String(text || '').replace(/\r\n?/g, '\n').replace(/\n+$/, '').slice(0, CELL_MAX);
+    if (v === t.rows[r][c]) return;
+    t.rows[r][c] = v; touchMemo(m);
+    saveState();
+  }
+
   function openMemo(id, from) {
     if (!findMemo(id)) return;
     ui.memoOpen = id; ui.memoEdit = false; ui.memoDraft = ''; ui.commentDraft = ''; ui.detailFrom = from || null;
@@ -2027,7 +2144,7 @@ datesSorted().forEach(function (d) {
     var v = String(ui.memoDraft).replace(/\r\n?/g, '\n').slice(0, MEMO_MAX);
     if (ui.memoOpen === 'new') {
       if (!v.trim()) return false;
-      var m = { id: uid(), text: v, updated: Date.now(), who: myName(), fav: false, likes: [], comments: [] };
+      var m = { id: uid(), text: v, updated: Date.now(), who: myName(), fav: false, likes: [], comments: [], tables: [] };
       state.memos.unshift(m);
       ui.memoOpen = m.id; ui.memoEdit = false; ui.memoDraft = '';
       commit(); act('memo', '메모 추가: ' + (memoLines(m)[0] || '').slice(0, 30));
@@ -3184,10 +3301,79 @@ datesSorted().forEach(function (d) {
           case 'memo-delete': deleteMemo(id); break;
           case 'memo-like': toggleMemoLike(id); break;
           case 'memo-comment-del': deleteMemoComment(ui.memoOpen, b.closest('[data-comment-id]').dataset.commentId); break;
+          case 'table-add': addMemoTable(ui.memoOpen); break;
+          case 'table-row-add': case 'table-col-add': case 'table-row-del': case 'table-col-del': case 'table-del':
+            tableAction(ui.memoOpen, b.closest('[data-table-id]').dataset.tableId, b.dataset.action); break;
         }
       });
+      // 표: 칸 선택 표시, 칸에서 나갈 때 저장, 붙여넣기는 글자만
+      var cellInfo = function (el) { var t = el.closest('[data-table-id]'); return { tid: t.dataset.tableId, r: Number(el.dataset.r), c: Number(el.dataset.c) }; };
+      memosView.addEventListener('focusin', function (e) {
+        var cell = e.target.closest ? e.target.closest('.mtable__cell') : null; if (!cell) return;
+        var ci = cellInfo(cell);
+        ui.tableSel = { t: ci.tid, r: ci.r, c: ci.c };
+        Array.prototype.forEach.call(memosView.querySelectorAll('.mtable td.is-sel'), function (td) { td.classList.remove('is-sel'); });
+        cell.parentNode.classList.add('is-sel');
+      });
+      memosView.addEventListener('focusout', function (e) {
+        var cell = e.target.closest ? e.target.closest('.mtable__cell') : null; if (!cell || !ui.memoOpen) return;
+        var ci = cellInfo(cell);
+        saveTableCell(ui.memoOpen, ci.tid, ci.r, ci.c, cell.innerText);
+      });
+      memosView.addEventListener('paste', function (e) {
+        var cell = e.target.closest ? e.target.closest('.mtable__cell') : null; if (!cell) return;
+        e.preventDefault();
+        var txt = (e.clipboardData || window.clipboardData).getData('text').replace(/\r\n?/g, '\n');
+        if (document.queryCommandSupported && document.queryCommandSupported('insertText')) document.execCommand('insertText', false, txt);
+        else cell.textContent += txt;
+      });
+      // 표: 선을 끌어 열 너비 / 행 높이 조절 (마우스·터치 공통)
+      var gripDrag = null;
+      memosView.addEventListener('pointerdown', function (e) {
+        var g = e.target.closest ? e.target.closest('[data-grip]') : null; if (!g || !ui.memoOpen) return;
+        var tEl = g.closest('[data-table-id]'); var m = findMemo(ui.memoOpen); var t = m && findTable(m, tEl.dataset.tableId); if (!t) return;
+        e.preventDefault();
+        if (document.activeElement && document.activeElement.classList && document.activeElement.classList.contains('mtable__cell')) document.activeElement.blur();
+        var isCol = g.dataset.grip === 'col', i = Number(g.dataset.i);
+        gripDrag = { isCol: isCol, i: i, t: t, m: m, el: tEl, start: isCol ? e.clientX : e.clientY, size: isCol ? t.cols[i] : t.rowH[i], now: isCol ? t.cols[i] : t.rowH[i], pointerId: e.pointerId, grip: g };
+        tEl.classList.add(isCol ? 'is-col-resizing' : 'is-row-resizing');
+        try { g.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+      });
+      memosView.addEventListener('pointermove', function (e) {
+        if (!gripDrag || e.pointerId !== gripDrag.pointerId) return;
+        e.preventDefault();
+        var d = (gripDrag.isCol ? e.clientX : e.clientY) - gripDrag.start;
+        if (gripDrag.isCol) {
+          var w = Math.max(COL_W_MIN, Math.min(COL_W_MAX, Math.round(gripDrag.size + d)));
+          gripDrag.now = w;
+          var cols = gripDrag.el.querySelectorAll('col'); if (cols[gripDrag.i]) cols[gripDrag.i].style.width = w + 'px';
+          var total = gripDrag.t.cols.reduce(function (a, b, k) { return a + (k === gripDrag.i ? w : b); }, 0);
+          gripDrag.el.querySelector('table').style.width = total + 'px';
+        } else {
+          var hgt = Math.max(ROW_H_MIN, Math.min(ROW_H_MAX, Math.round(gripDrag.size + d)));
+          gripDrag.now = hgt;
+          var tr = gripDrag.el.querySelectorAll('tr')[gripDrag.i];
+          if (tr) Array.prototype.forEach.call(tr.querySelectorAll('.mtable__cell'), function (c) { c.style.minHeight = hgt + 'px'; });
+        }
+      });
+      var endGrip = function (e) {
+        if (!gripDrag || (e && e.pointerId !== gripDrag.pointerId)) return;
+        var g = gripDrag; gripDrag = null;
+        g.el.classList.remove('is-col-resizing', 'is-row-resizing');
+        try { g.grip.releasePointerCapture(g.pointerId); } catch (err) { /* ignore */ }
+        if (g.now === g.size) return;
+        if (g.isCol) g.t.cols[g.i] = g.now; else g.t.rowH[g.i] = g.now;
+        touchMemo(g.m); saveState();
+      };
+      memosView.addEventListener('pointerup', endGrip);
+      memosView.addEventListener('pointercancel', endGrip);
+      memosView.addEventListener('touchmove', function (e) { if (gripDrag) e.preventDefault(); }, { passive: false });
       // 앱 전환·화면 끔·탭 닫기: 적던 메모를 잃지 않도록 저장
-      var flushMemoDraft = function () { if (ui.memoEdit && String(ui.memoDraft).trim()) saveMemoEdit(true); };
+      var flushMemoDraft = function () {
+        var ae = document.activeElement;
+        if (ae && ae.classList && ae.classList.contains('mtable__cell') && ui.memoOpen) { var fi = cellInfo(ae); saveTableCell(ui.memoOpen, fi.tid, fi.r, fi.c, ae.innerText); }
+        if (ui.memoEdit && String(ui.memoDraft).trim()) saveMemoEdit(true);
+      };
       document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') flushMemoDraft(); });
       window.addEventListener('pagehide', flushMemoDraft);
     }
