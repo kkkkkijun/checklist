@@ -335,7 +335,7 @@
         var dmemo = typeof dc.memo === 'string' ? dc.memo.replace(/\r\n?/g, '\n').trim().slice(0, DATE_MEMO_MAX) : '';
         if (!ddate && !dlabel && !dmemo && !dtime) return { ok: false, error: (di + 1) + '번째 택일 후보가 비어 있습니다.' };
         seenDate[did] = true;
-        dates.push({ id: did, date: ddate, time: dtime, label: dlabel, memo: dmemo });
+        dates.push({ id: did, date: ddate, time: dtime, label: dlabel, memo: dmemo, fav: dc.fav === true, likes: normalizeLikes(dc.likes), comments: normalizeComments(dc.comments) });
       }
     }
 
@@ -365,7 +365,7 @@
         names.push({
           id: nid2, name: nname, favorite: nc.favorite === true,
           memo: typeof nc.memo === 'string' ? nc.memo.replace(/\r\n?/g, '\n').trim().slice(0, NAME_MEMO_MAX) : '',
-          hanja: hanja, dateIds: dateIds
+          hanja: hanja, dateIds: dateIds, likes: normalizeLikes(nc.likes), comments: normalizeComments(nc.comments)
         });
       }
     }
@@ -492,7 +492,7 @@
 
   /* ---------- state ---------- */
   var state;
-  var ui = { filter: 'all', editMode: false, pendingUndo: null, undoTimer: null, collapsed: {}, noteForm: null, qtyEdit: null, highlightEdit: false, activeCategory: null, highlightsCollapsed: false, itemEdit: null, view: 'checklist', picksEdit: null, picksActive: 'gpt', dateEdit: null, nameEdit: null, search: '', searchOpen: false, stripOpen: false, onboardingDismissed: false, deviceName: '', autoName: '', toastRemote: true, activity: [], supportEdit: null, memoFocus: null, templateCleared: false, bulkOpen: null, doneTab: {}, tagFilter: {}, tagsMigrated: false, subTab: {}, subsMigrated: false, showSubLabel: false, recordTab: 'notes', planTab: 'picks', addSub: {}, addSubPick: {}, memoOpen: null, memoEdit: false, memoDraft: '', commentDraft: '', noteComments: {}, noteCommentDraft: {}, noteOpen: null, detailFrom: null, archiveTab: 'fav' };
+  var ui = { filter: 'all', editMode: false, pendingUndo: null, undoTimer: null, collapsed: {}, noteForm: null, qtyEdit: null, highlightEdit: false, activeCategory: null, highlightsCollapsed: false, itemEdit: null, view: 'checklist', picksEdit: null, picksActive: 'gpt', dateEdit: null, nameEdit: null, search: '', searchOpen: false, stripOpen: false, onboardingDismissed: false, deviceName: '', autoName: '', toastRemote: true, activity: [], supportEdit: null, memoFocus: null, templateCleared: false, bulkOpen: null, doneTab: {}, tagFilter: {}, tagsMigrated: false, subTab: {}, subsMigrated: false, showSubLabel: false, recordTab: 'notes', planTab: 'picks', addSub: {}, addSubPick: {}, memoOpen: null, memoEdit: false, memoDraft: '', commentDraft: '', noteComments: {}, noteCommentDraft: {}, noteOpen: null, detailFrom: null, archiveTab: 'fav', rxOpen: {}, rxDraft: {} };
 
   // Active tab (narrow screens): falls back to the first category when the saved one is gone.
   function activeCategoryId() {
@@ -1345,7 +1345,16 @@
       if (!pick(m)) return;
       out.push({ kind: 'memo', id: m.id, title: (memoLines(m)[0] || '').slice(0, 80), sub: [m.who, memoStamp(m.updated)].filter(Boolean).join(' · '), t: m.updated || 0, likes: m.likes.length, comments: m.comments.length });
     });
-    out.sort(function (a, b) { return b.t - a.t; });
+    state.dates.forEach(function (d) {
+      if (!(tab === 'fav' ? !!d.fav : d.likes.indexOf(me) !== -1)) return;
+      out.push({ kind: 'date', id: d.id, title: dateHeadline(d) + (d.label ? ' · ' + d.label : ''), sub: d.memo ? d.memo.split('\n')[0].slice(0, 40) : '택일 후보', t: d.date ? Date.parse(d.date + 'T00:00:00') || 0 : 0, likes: d.likes.length, comments: d.comments.length });
+    });
+    state.names.forEach(function (n) {
+      if (!(tab === 'fav' ? !!n.favorite : n.likes.indexOf(me) !== -1)) return;
+      out.push({ kind: 'name', id: n.id, title: n.name, sub: n.hanja.length ? n.hanja.map(function (x) { return x.chars; }).filter(Boolean).join(' / ') || '이름 후보' : '이름 후보', t: 0, likes: n.likes.length, comments: n.comments.length });
+    });
+    var rank = { note: 0, memo: 0, date: 1, name: 2 };
+    out.sort(function (a, b) { return rank[a.kind] - rank[b.kind] || b.t - a.t; });
     return out;
   }
   function renderArchive() {
@@ -1360,12 +1369,12 @@
     });
     var list = ui.archiveTab === 'like' ? likes : favs;
     if (!list.length) {
-      box.innerHTML = '<li class="archive-empty">' + (ui.archiveTab === 'like' ? '아직 좋아요를 누른 글이 없습니다. 일지·메모에서 ♡ 좋아요를 눌러 보세요.' : '아직 즐겨찾기한 글이 없습니다. 일지·메모에서 ☆를 눌러 보세요.') + '</li>';
+      box.innerHTML = '<li class="archive-empty">' + (ui.archiveTab === 'like' ? '아직 좋아요를 누른 글이 없습니다. 일지·메모·택일·작명에서 ♡ 좋아요를 눌러 보세요.' : '아직 즐겨찾기한 글이 없습니다. 일지·메모·택일·작명에서 ☆를 눌러 보세요.') + '</li>';
       return;
     }
     box.innerHTML = list.map(function (e) {
       return '<li><button type="button" class="archive-item" data-action="archive-open" data-kind="' + e.kind + '" data-id="' + escapeHtml(e.id) + '" data-focus-key="arch:' + e.kind + ':' + escapeHtml(e.id) + '">' +
-        '<span class="archive-item__kind archive-item__kind--' + e.kind + '">' + (e.kind === 'note' ? '일지' : '메모') + '</span>' +
+        '<span class="archive-item__kind archive-item__kind--' + e.kind + '">' + ({ note: '일지', memo: '메모', date: '택일', name: '작명' })[e.kind] + '</span>' +
         '<span class="archive-item__main"><span class="archive-item__title">' + escapeHtml(e.title) + '</span><span class="archive-item__sub">' + escapeHtml(e.sub) + (e.likes ? ' · ♥ ' + e.likes : '') + (e.comments ? ' · 💬 ' + e.comments : '') + '</span></span>' +
         '<span class="archive-item__chev" aria-hidden="true">›</span></button></li>';
     }).join('');
@@ -1559,9 +1568,110 @@
 
   function datesSorted() {
     return state.dates.slice().sort(function (a, b) {
+      if (!!a.fav !== !!b.fav) return a.fav ? -1 : 1; // 즐겨찾기 먼저
       var ad = a.date || '9999-99-99', bd = b.date || '9999-99-99';
       if (ad !== bd) return ad < bd ? -1 : 1;
       return state.dates.indexOf(a) - state.dates.indexOf(b);
+    });
+  }
+
+  /* ---------- 택일·작명 공용: 좋아요 · 댓글(펼침) ---------- */
+  function rxTarget(kind, id) { return kind === 'date' ? findDate(id) : findName(id); }
+  function rxLabel(kind, x) { return kind === 'date' ? '택일 후보 ‘' + (x.label || dateHeadline(x)) + '’' : '이름 후보 ‘' + x.name + '’'; }
+  function rxRender(kind) { if (kind === 'date') renderDates(); else renderNames(); }
+  function rxHtml(kind, x) {
+    var key = kind + ':' + x.id, id = escapeHtml(x.id);
+    var me = myName();
+    var liked = x.likes.indexOf(me) !== -1;
+    var open = !!ui.rxOpen[key];
+    var h = '<div class="note__react">';
+    h += '<button type="button" class="memo-like memo-like--small' + (liked ? ' is-on' : '') + '" data-action="rx-like" data-focus-key="rx-like:' + kind + ':' + id + '" aria-pressed="' + (liked ? 'true' : 'false') + '">' + (liked ? '♥' : '♡') + ' 좋아요' + (x.likes.length ? ' <b>' + x.likes.length + '</b>' : '') + '</button>';
+    h += '<button type="button" class="memo-like memo-like--small note__cbtn' + (open ? ' is-open' : '') + '" data-action="rx-comments" data-focus-key="rx-cbtn:' + kind + ':' + id + '" aria-expanded="' + (open ? 'true' : 'false') + '">💬 댓글' + (x.comments.length ? ' <b>' + x.comments.length + '</b>' : '') + '</button>';
+    if (x.likes.length) h += '<span class="memo-like__who">' + escapeHtml(x.likes.join(', ')) + '</span>';
+    h += '</div>';
+    if (!open) return h;
+    h += '<section class="memo-comments note__comments rx-comments" aria-label="댓글">';
+    if (x.comments.length) {
+      h += '<ul class="memo-comments__list">' + x.comments.map(function (c) {
+        return '<li class="memo-comment" data-comment-id="' + escapeHtml(c.id) + '"><div class="memo-comment__head"><span class="memo-comment__who">' + escapeHtml(c.who || '가족') + '</span><span class="memo-comment__time">' + escapeHtml(memoStamp(c.t)) + '</span>' +
+          '<button type="button" class="memo-comment__del" data-action="rx-comment-del" aria-label="이 댓글 삭제">×</button></div><p class="memo-comment__text">' + escapeHtml(c.text) + '</p></li>';
+      }).join('') + '</ul>';
+    } else h += '<p class="memo-comments__empty">첫 댓글을 남겨 보세요.</p>';
+    h += '<form class="memo-comments__form" data-action="rx-comment"><label class="visually-hidden" for="rx-input-' + kind + '-' + id + '">댓글 입력</label>';
+    h += '<input type="text" id="rx-input-' + kind + '-' + id + '" data-role="rx-input" data-focus-key="rx-input:' + kind + ':' + id + '" maxlength="' + COMMENT_MAX + '" placeholder="댓글 달기" autocomplete="off" enterkeyhint="send" value="' + escapeHtml(ui.rxDraft[key] || '') + '"><button type="submit" class="btn btn--primary btn--small">등록</button></form></section>';
+    return h;
+  }
+  function rxToggleLike(kind, id) {
+    var x = rxTarget(kind, id); if (!x) return;
+    var me = myName(); var i = x.likes.indexOf(me);
+    if (i === -1) x.likes.push(me); else x.likes.splice(i, 1);
+    commit();
+    if (i === -1) act(kind, rxLabel(kind, x) + '에 좋아요');
+  }
+  function rxAddComment(kind, id, text) {
+    var x = rxTarget(kind, id); if (!x) return false;
+    var t = String(text || '').replace(/\r\n?/g, '\n').trim().slice(0, COMMENT_MAX);
+    if (!t) { showToast('댓글 내용을 입력하세요.'); return false; }
+    if (x.comments.length >= COMMENTS_PER_MEMO) { showToast('댓글은 항목마다 ' + COMMENTS_PER_MEMO + '개까지 남길 수 있습니다.'); return false; }
+    x.comments.push({ id: uid(), who: myName(), text: t, t: Date.now() });
+    delete ui.rxDraft[kind + ':' + id];
+    commit(); act(kind, rxLabel(kind, x) + '에 댓글: ' + t.slice(0, 30));
+    return true;
+  }
+  function rxDeleteComment(kind, id, cid) {
+    var x = rxTarget(kind, id); if (!x) return;
+    var idx = -1; x.comments.forEach(function (c, i) { if (c.id === cid) idx = i; });
+    if (idx < 0) return;
+    var c = x.comments[idx];
+    x.comments.splice(idx, 1); commit();
+    showToast('댓글을 삭제했습니다.', function () { var y = rxTarget(kind, id); if (!y) return; y.comments.splice(Math.min(idx, y.comments.length), 0, c); commit(); showToast('삭제를 취소했습니다.'); });
+  }
+  function toggleDateFav(id) {
+    var d = findDate(id); if (!d) return;
+    d.fav = !d.fav; commit();
+    act('date', rxLabel('date', d) + ' ' + (d.fav ? '★ 즐겨찾기' : '즐겨찾기 해제'));
+    showToast(d.fav ? '즐겨찾기에 추가했습니다. 목록 맨 위에 고정됩니다.' : '즐겨찾기를 해제했습니다.');
+  }
+  // 보관함 등에서 특정 카드로 이동: 화면 전환 → 댓글 펼침 → 스크롤·강조
+  function jumpToCard(kind, id) {
+    if (!rxTarget(kind, id)) return;
+    ui.rxOpen[kind + ':' + id] = true;
+    var view = kind === 'date' ? 'picks' : 'names';
+    if (ui.view !== view) setView(view); else rxRender(kind);
+    var el = document.querySelector('[data-' + kind + '-id="' + id + '"]');
+    if (!el) return;
+    el.scrollIntoView({ block: 'center' });
+    el.classList.add('is-flash');
+    setTimeout(function () { el.classList.remove('is-flash'); }, 1600);
+    var fb = el.querySelector('[data-action="rx-like"]'); if (fb) fb.focus({ preventScroll: true });
+  }
+  // 택일·작명 화면의 좋아요/댓글 이벤트
+  function bindRx(viewEl, kind) {
+    var idOf = function (el) { var li = el.closest('[data-' + kind + '-id]'); return li ? li.dataset[kind + 'Id'] : null; };
+    viewEl.addEventListener('click', function (e) {
+      var btn = e.target.closest('button[data-action^="rx-"]'); if (!btn) return;
+      var id = idOf(btn); if (!id) return;
+      switch (btn.dataset.action) {
+        case 'rx-like': rxToggleLike(kind, id); break;
+        case 'rx-comments': {
+          var key = kind + ':' + id;
+          if (ui.rxOpen[key]) delete ui.rxOpen[key]; else ui.rxOpen[key] = true;
+          rxRender(kind);
+          var f = document.querySelector('[data-focus-key="' + (ui.rxOpen[key] ? 'rx-input:' : 'rx-cbtn:') + kind + ':' + id + '"]'); if (f) f.focus();
+          break;
+        }
+        case 'rx-comment-del': rxDeleteComment(kind, id, btn.closest('[data-comment-id]').dataset.commentId); break;
+      }
+    });
+    viewEl.addEventListener('submit', function (e) {
+      var form = e.target.closest('form[data-action="rx-comment"]'); if (!form) return;
+      e.preventDefault(); e.stopPropagation();
+      var id = idOf(form); if (!id) return;
+      if (rxAddComment(kind, id, $('input', form).value)) { var again = document.querySelector('[data-focus-key="rx-input:' + kind + ':' + id + '"]'); if (again) again.focus(); }
+    }, true);
+    viewEl.addEventListener('input', function (e) {
+      if (e.target.dataset.role !== 'rx-input') return;
+      var id = idOf(e.target); if (id) ui.rxDraft[kind + ':' + id] = e.target.value;
     });
   }
 
@@ -1576,8 +1686,8 @@
 datesSorted().forEach(function (d) {
       if (ui.dateEdit === d.id) { html += '<li class="datecard datecard--editing" data-date-id="' + escapeHtml(d.id) + '">' + dateFormHtml(d) + '</li>'; return; }
       var linked = namesForDate(d.id);
-      html += '<li class="datecard" data-date-id="' + escapeHtml(d.id) + '">';
-      html += '<div class="datecard__head"><div class="datecard__meta"><span class="datecard__date">' + escapeHtml(dateHeadline(d)) + '</span>';
+      html += '<li class="datecard' + (d.fav ? ' is-fav' : '') + '" data-date-id="' + escapeHtml(d.id) + '">';
+      html += '<div class="datecard__head"><div class="datecard__meta"><button type="button" class="star" data-action="date-fav" data-focus-key="date-fav:' + escapeHtml(d.id) + '" aria-pressed="' + (d.fav ? 'true' : 'false') + '" aria-label="' + escapeHtml(dateHeadline(d)) + ' 즐겨찾기">' + (d.fav ? '★' : '☆') + '</button><span class="datecard__date">' + escapeHtml(dateHeadline(d)) + '</span>';
       if (d.label) html += '<span class="badge badge--label">' + escapeHtml(d.label) + '</span>';
       html += '</div><div class="datecard__actions">';
       html += '<button type="button" class="btn btn--small" data-action="edit-date" data-focus-key="date-edit:' + escapeHtml(d.id) + '">수정</button>';
@@ -1586,7 +1696,7 @@ datesSorted().forEach(function (d) {
       html += '<div class="linkrow"><span class="linkrow__label">연결된 이름</span>';
       if (linked.length) html += linked.map(function (n) { return '<span class="chip">' + escapeHtml(n.name) + (n.favorite ? ' ★' : '') + '</span>'; }).join('');
       else html += '<span class="linkrow__empty">없음 — 작명 노트에서 이름을 이 택일에 연결하세요</span>';
-      html += '</div></li>';
+      html += '</div>' + rxHtml('date', d) + '</li>';
     });
     list.innerHTML = html;
     var addBtn = $('#add-date-btn');
@@ -1610,7 +1720,7 @@ datesSorted().forEach(function (d) {
     if (!v.date) { err.textContent = '날짜를 선택하세요.'; err.hidden = false; var di = $('input[name="date"]', form); if (di) di.focus(); return; }
     var key = form.dataset.dateForm;
     if (key === 'new') {
-      state.dates.push({ id: uid(), date: v.date, time: v.time, label: v.label, memo: v.memo });
+      state.dates.push({ id: uid(), date: v.date, time: v.time, label: v.label, memo: v.memo, fav: false, likes: [], comments: [] });
       ui.dateEdit = null; commit(); act('date', '택일 후보 ‘' + (v.label || formatNoteDate(v.date)) + '’ 추가'); showToast('택일 후보를 저장했습니다.');
       var ab = $('#add-date-btn'); if (ab) ab.focus();
     } else {
@@ -1712,7 +1822,7 @@ datesSorted().forEach(function (d) {
       var linked = n.dateIds.map(findDate).filter(Boolean);
       if (linked.length) html += linked.map(function (d) { return '<span class="chip">' + escapeHtml(dateHeadline(d) + (d.label ? ' · ' + d.label : '')) + '</span>'; }).join('');
       else html += '<span class="linkrow__empty">없음</span>';
-      html += '</div></li>';
+      html += '</div>' + rxHtml('name', n) + '</li>';
     });
     list.innerHTML = html;
     var addBtn = $('#add-name-btn');
@@ -1739,7 +1849,7 @@ datesSorted().forEach(function (d) {
     if (!v.name) { err.textContent = '한글 이름을 입력하세요.'; err.hidden = false; form.elements.name.focus(); return; }
     var key = form.dataset.nameForm;
     if (key === 'new') {
-      state.names.push({ id: uid(), name: v.name, favorite: v.favorite, memo: v.memo, hanja: v.hanja, dateIds: v.dateIds });
+      state.names.push({ id: uid(), name: v.name, favorite: v.favorite, memo: v.memo, hanja: v.hanja, dateIds: v.dateIds, likes: [], comments: [] });
       ui.nameEdit = null; commit(); act('name', '이름 후보 ‘' + v.name + '’ 추가'); showToast('이름 후보를 저장했습니다.');
       var ab = $('#add-name-btn'); if (ab) ab.focus();
     } else {
@@ -2734,7 +2844,7 @@ datesSorted().forEach(function (d) {
     if (el.readOnly || el.disabled) return false; // readonly share-link etc. must not block sync
     if (el.type === 'checkbox' || el.type === 'radio' || el.type === 'file' || el.type === 'button') return false;
     // Only editable fields inside an item/note/highlights editor should defer a remote update.
-    return !!el.closest('.item--edit, .subs-manager, .is-qty-editing, .note-form, #highlights-form, #add-category-form, .pick-form, .date-form, .name-form, .support-form, .memo-detail, .note__comments, #view-settings');
+    return !!el.closest('.item--edit, .subs-manager, .is-qty-editing, .note-form, #highlights-form, #add-category-form, .pick-form, .date-form, .name-form, .support-form, .memo-detail, .note__comments, .rx-comments, #view-settings');
   }
 
   var migrationsQueued = false;
@@ -2908,7 +3018,10 @@ datesSorted().forEach(function (d) {
       var at = e.target.closest('[data-action="archive-tab"]');
       if (at) { ui.archiveTab = at.dataset.tab === 'like' ? 'like' : 'fav'; saveUiPrefs(); renderArchive(); return; }
       var ao = e.target.closest('[data-action="archive-open"]');
-      if (ao) { if (ao.dataset.kind === 'note') openNote(ao.dataset.id, 'archive'); else openMemo(ao.dataset.id, 'archive'); }
+      if (ao) {
+        var k = ao.dataset.kind;
+        if (k === 'note') openNote(ao.dataset.id, 'archive'); else if (k === 'memo') openMemo(ao.dataset.id, 'archive'); else jumpToCard(k, ao.dataset.id);
+      }
     });
     document.addEventListener('click', function (e) {
       var sw = e.target.closest('[data-action="switch-view"]');
@@ -3334,6 +3447,7 @@ datesSorted().forEach(function (d) {
     // 택일 후보 (view-picks) events
     var picksView = $('#view-picks');
     if (picksView) {
+      bindRx(picksView, 'date');
       picksView.addEventListener('click', function (e) {
         var add = e.target.closest('#add-date-btn');
         if (add) { ui.dateEdit = 'new'; renderDates(); var f = document.querySelector('[data-focus-key="date-d:new"]'); if (f) f.focus(); return; }
@@ -3344,6 +3458,7 @@ datesSorted().forEach(function (d) {
           case 'edit-date': ui.dateEdit = li.dataset.dateId; renderDates(); var ff = document.querySelector('[data-focus-key="date-d:' + li.dataset.dateId + '"]'); if (ff) ff.focus(); break;
           case 'cancel-date': var wasNew = !li; ui.dateEdit = null; renderDates(); var back = wasNew ? $('#add-date-btn') : document.querySelector('[data-focus-key="date-edit:' + li.dataset.dateId + '"]'); if (back) back.focus(); break;
           case 'delete-date': deleteDate(li.dataset.dateId); break;
+          case 'date-fav': toggleDateFav(li.dataset.dateId); break;
         }
       });
       picksView.addEventListener('submit', function (e) {
@@ -3357,6 +3472,7 @@ datesSorted().forEach(function (d) {
     // 작명 노트 (view-names) events
     var namesView = $('#view-names');
     if (namesView) {
+      bindRx(namesView, 'name');
       namesView.addEventListener('click', function (e) {
         var add = e.target.closest('#add-name-btn');
         if (add) { ui.nameEdit = 'new'; renderNames(); var f = document.querySelector('[data-focus-key="name-n:new"]'); if (f) f.focus(); return; }

@@ -127,7 +127,7 @@
     });
     s.notes.forEach(function (n) { doc.notes[n.id] = { date: n.date || '', title: n.title || '', body: n.body || '', fav: !!n.fav, likes: (n.likes && n.likes.length) ? n.likes.slice() : null, comments: (n.comments && n.comments.length) ? n.comments.map(function (c) { return { id: c.id, who: c.who || '', text: c.text || '', t: c.t || 0 }; }) : null }; });
     doc.dates = {};
-    (s.dates || []).forEach(function (d, i) { doc.dates[d.id] = { date: d.date || '', time: d.time || '', label: d.label || '', memo: d.memo || '', order: i }; });
+    (s.dates || []).forEach(function (d, i) { doc.dates[d.id] = { date: d.date || '', time: d.time || '', label: d.label || '', memo: d.memo || '', fav: !!d.fav, likes: (d.likes && d.likes.length) ? d.likes.slice() : null, comments: (d.comments && d.comments.length) ? d.comments.map(function (c) { return { id: c.id, who: c.who || '', text: c.text || '', t: c.t || 0 }; }) : null, order: i }; });
     doc.dueDate = s.dueDate || '';
     doc.memo = s.memo || '';
     doc.memos = {};
@@ -135,7 +135,7 @@
     doc.supports = {};
     (s.supports || []).forEach(function (x, i) { doc.supports[x.id] = { title: x.title || '', target: x.target || '', benefit: x.benefit || '', howto: x.howto || '', deadline: x.deadline || '', link: x.link || '', status: x.status || 'todo', memo: x.memo || '', order: i }; });
     doc.names = {};
-    (s.names || []).forEach(function (n, i) { doc.names[n.id] = { name: n.name || '', favorite: !!n.favorite, memo: n.memo || '', hanja: (n.hanja || []).map(function (h) { return { id: h.id || '', chars: h.chars || '', meaning: h.meaning || '' }; }), dateIds: (n.dateIds || []).slice(), order: i }; });
+    (s.names || []).forEach(function (n, i) { doc.names[n.id] = { name: n.name || '', favorite: !!n.favorite, memo: n.memo || '', hanja: (n.hanja || []).map(function (h) { return { id: h.id || '', chars: h.chars || '', meaning: h.meaning || '' }; }), dateIds: (n.dateIds || []).slice(), likes: (n.likes && n.likes.length) ? n.likes.slice() : null, comments: (n.comments && n.comments.length) ? n.comments.map(function (c) { return { id: c.id, who: c.who || '', text: c.text || '', t: c.t || 0 }; }) : null, order: i }; });
     return doc;
   }
 
@@ -158,8 +158,8 @@
         return { id: it.id, categoryId: it.categoryId, name: it.name, price: typeof it.price === 'number' ? it.price : null, tags: Array.isArray(it.tags) ? it.tags : (it.tags && typeof it.tags === 'object' ? Object.keys(it.tags).map(function (k) { return it.tags[k]; }) : []), sub: typeof it.sub === 'string' ? it.sub : '', memo: it.memo || '', done: it.done === true, excluded: it.excluded === true };
       }),
       notes: Object.keys(doc.notes || {}).map(function (id) { var n = doc.notes[id] || {}; return { id: id, date: n.date || '', title: n.title || '', body: n.body || '', fav: n.fav === true, likes: n.likes || [], comments: n.comments || [] }; }),
-      dates: sortedEntries(doc.dates).map(function (d) { return { id: d.id, date: d.date || '', time: d.time || '', label: d.label || '', memo: d.memo || '' }; }),
-      names: sortedEntries(doc.names).map(function (n) { return { id: n.id, name: n.name || '', favorite: n.favorite === true, memo: n.memo || '', hanja: asArr(n.hanja).map(function (h) { return { id: (h && h.id) || '', chars: (h && h.chars) || '', meaning: (h && h.meaning) || '' }; }), dateIds: asArr(n.dateIds).filter(function (x) { return typeof x === 'string'; }) }; }),
+      dates: sortedEntries(doc.dates).map(function (d) { return { id: d.id, date: d.date || '', time: d.time || '', label: d.label || '', memo: d.memo || '', fav: d.fav === true, likes: d.likes || [], comments: d.comments || [] }; }),
+      names: sortedEntries(doc.names).map(function (n) { return { id: n.id, name: n.name || '', favorite: n.favorite === true, likes: n.likes || [], comments: n.comments || [], memo: n.memo || '', hanja: asArr(n.hanja).map(function (h) { return { id: (h && h.id) || '', chars: (h && h.chars) || '', meaning: (h && h.meaning) || '' }; }), dateIds: asArr(n.dateIds).filter(function (x) { return typeof x === 'string'; }) }; }),
       highlights: typeof doc.highlights === 'string' ? doc.highlights : '',
       dueDate: typeof doc.dueDate === 'string' ? doc.dueDate : '',
       memo: typeof doc.memo === 'string' ? doc.memo : '',

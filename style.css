@@ -278,6 +278,12 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .note-card__date { color: var(--peach-strong); }
 .note-detail__title { margin: 0 0 8px; font-size: 1.1rem; }
 #note-detail .note--editing { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; }
+.datecard.is-fav { border-color: #f1c77a; background: #fffaf0; }
+.datecard__meta .star { margin: -6px 0 -6px -8px; }
+.datecard.is-flash, .namecard.is-flash { animation: card-flash 1.6s ease-out; }
+@keyframes card-flash { 0%, 40% { box-shadow: 0 0 0 3px var(--peach-strong); } 100% { box-shadow: 0 0 0 0 transparent; } }
+.archive-item__kind--date { background: #e1f5ee; color: #085041; }
+.archive-item__kind--name { background: #eeedfe; color: #3c3489; }
 /* 보관함 (설정) */
 .archive-tabs { display: flex; gap: 4px; padding: 4px; background: #f3e8e0; border-radius: 12px; }
 .archive-tab { flex: 1 1 0; min-height: 40px; border: 0; border-radius: 9px; background: transparent; color: var(--muted); font: inherit; font-size: 0.9rem; font-weight: 700; cursor: pointer; }
