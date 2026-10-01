@@ -408,9 +408,10 @@
         if (!mm || typeof mm !== 'object') return { ok: false, error: (mi + 1) + '번째 메모가 올바르지 않습니다.' };
         var mid = typeof mm.id === 'string' ? mm.id.trim() : '';
         var mtext = typeof mm.text === 'string' ? mm.text.replace(/\r\n?/g, '\n').slice(0, MEMO_MAX) : '';
-        if (!mid || !mtext.trim() || seenMemo[mid]) continue; // empty or duplicate memos are dropped
+        var mtables = normalizeTables(mm.tables);
+        if (!mid || (!mtext.trim() && !mtables.length) || seenMemo[mid]) continue; // empty or duplicate memos are dropped
         seenMemo[mid] = true;
-        memos.push({ id: mid, text: mtext, updated: typeof mm.updated === 'number' ? mm.updated : 0, who: typeof mm.who === 'string' ? mm.who.trim().slice(0, 12) : '', fav: mm.fav === true, likes: normalizeLikes(mm.likes), comments: normalizeComments(mm.comments), tables: normalizeTables(mm.tables) });
+        memos.push({ id: mid, text: mtext, updated: typeof mm.updated === 'number' ? mm.updated : 0, who: typeof mm.who === 'string' ? mm.who.trim().slice(0, 12) : '', fav: mm.fav === true, likes: normalizeLikes(mm.likes), comments: normalizeComments(mm.comments), tables: mtables });
       }
     }
     if (memo.trim() && !seenMemo['legacy-memo']) { memos.push({ id: 'legacy-memo', text: memo, updated: 0, who: '', fav: false, likes: [], comments: [], tables: [] }); }
@@ -750,7 +751,7 @@
     var nmCount = $('#ptab-names-count');
     if (nmCount) nmCount.textContent = state.names.length ? String(state.names.length) : '';
     var group = (ui.view === 'notes' || ui.view === 'memos') ? 'record' : (ui.view === 'picks' || ui.view === 'names') ? 'plan' : '';
-    var counts = { notes: state.notes.length, memos: state.memos.filter(function (m) { return m.text.trim(); }).length, picks: state.dates.length + pkFilled, names: state.names.length };
+    var counts = { notes: state.notes.length, memos: state.memos.length, picks: state.dates.length + pkFilled, names: state.names.length };
     Array.prototype.forEach.call(document.querySelectorAll('.view-switch__btn'), function (b) {
       var on = b.dataset.target === ui.view;
       b.classList.toggle('is-active', on);
@@ -1962,7 +1963,14 @@ datesSorted().forEach(function (d) {
   // 즐겨찾기 먼저, 그 안에서는 최근 수정 순
   function memosSorted() { return state.memos.slice().sort(function (a, b) { return (b.fav ? 1 : 0) - (a.fav ? 1 : 0) || (b.updated || 0) - (a.updated || 0); }); }
   function memoStamp(t) { return t ? relTime(t) : ''; }
-  function memoLines(m) { return m.text.trim().split('\n').map(function (l) { return l.trim(); }).filter(Boolean); }
+  function memoLines(m) {
+    var lines = m.text.trim().split('\n').map(function (l) { return l.trim(); }).filter(Boolean);
+    if (lines.length || !m.tables || !m.tables.length) return lines;
+    var cells = [];
+    m.tables[0].rows.forEach(function (r) { r.forEach(function (c) { if (c.trim()) cells.push(c.trim().split('\n')[0]); }); });
+    return ['▦ 표' + (cells.length ? ' · ' + cells.slice(0, 3).join(', ') : '')];
+  }
+  function memoHasTableContent(m) { return m.tables.some(function (t) { return t.rows.some(function (r) { return r.some(function (c) { return c.trim(); }); }); }); }
   function memoMetaHtml(m) {
     var parts = [];
     if (m.who) parts.push(escapeHtml(m.who));
@@ -2016,7 +2024,7 @@ datesSorted().forEach(function (d) {
       h += '<label class="visually-hidden" for="memo-edit-input">메모 내용</label>';
       h += '<textarea class="memo-detail__input" id="memo-edit-input" data-focus-key="memo-edit" maxlength="' + MEMO_MAX + '" placeholder="내용을 입력하세요. 첫 줄이 제목처럼 보입니다.">' + escapeHtml(ui.memoDraft) + '</textarea>';
       h += '<div class="memo-detail__editbar"><button type="button" class="btn btn--primary" data-action="memo-save" data-focus-key="memo-save">저장</button><button type="button" class="btn" data-action="memo-cancel" data-focus-key="memo-cancel">취소</button></div>';
-      if (!isNew) h += memoTablesHtml(m); else h += '<p class="mtables__hint">표는 메모를 저장한 뒤에 추가할 수 있습니다.</p>';
+      if (!isNew) h += memoTablesHtml(m); else h += '<section class="mtables" aria-label="표"><button type="button" class="btn btn--small mtables__add" data-action="table-add" data-focus-key="table-add">▦ 표 추가</button></section>';
       return h;
     }
     var me = myName();
@@ -2068,6 +2076,12 @@ datesSorted().forEach(function (d) {
   function findTable(m, tid) { for (var i = 0; i < m.tables.length; i++) if (m.tables[i].id === tid) return m.tables[i]; return null; }
   function touchMemo(m) { m.updated = Date.now(); }
   function addMemoTable(id) {
+    if (id === 'new') {
+      var created = { id: uid(), text: String(ui.memoDraft).replace(/\r\n?/g, '\n').slice(0, MEMO_MAX), updated: Date.now(), who: myName(), fav: false, likes: [], comments: [], tables: [] };
+      state.memos.unshift(created);
+      ui.memoOpen = created.id; // 편집 상태(ui.memoEdit)와 적던 글(ui.memoDraft)은 그대로 둔다
+      id = created.id;
+    }
     var m = findMemo(id); if (!m) return;
     if (m.tables.length >= TABLES_PER_MEMO) { showToast('표는 메모마다 ' + TABLES_PER_MEMO + '개까지 넣을 수 있습니다.'); return; }
     var t = { id: uid(), cols: [COL_W_DEFAULT, COL_W_DEFAULT, COL_W_DEFAULT], rowH: [ROW_H_MIN, ROW_H_MIN, ROW_H_MIN], rows: [['', '', ''], ['', '', ''], ['', '', '']] };
@@ -2153,15 +2167,25 @@ datesSorted().forEach(function (d) {
     }
     var cur = findMemo(ui.memoOpen); if (!cur) return false;
     ui.memoEdit = false;
-    if (!v.trim() || v === cur.text) { ui.memoDraft = ''; renderMemo(); return false; }
+    if (v === cur.text || (!v.trim() && !cur.tables.length)) { ui.memoDraft = ''; renderMemo(); return false; }
     cur.text = v; cur.updated = Date.now(); ui.memoDraft = '';
     commit(); act('memo', '메모 수정: ' + (memoLines(cur)[0] || '').slice(0, 30));
     if (!quiet) showToast('메모를 저장했습니다.');
     return true;
   }
   function closeMemo() {
+    var ae = document.activeElement; // 표 칸에 커서가 있으면 그 내용부터 저장
+    if (ae && ae.classList && ae.classList.contains('mtable__cell') && ui.memoOpen && ui.memoOpen !== 'new') {
+      var tEl = ae.closest('[data-table-id]');
+      if (tEl) saveTableCell(ui.memoOpen, tEl.dataset.tableId, Number(ae.dataset.r), Number(ae.dataset.c), ae.innerText);
+    }
     if (ui.memoEdit) saveMemoEdit(true); // 목록으로 나가면 적던 내용은 저장
+    var leaving = ui.memoOpen && ui.memoOpen !== 'new' ? findMemo(ui.memoOpen) : null;
     ui.memoOpen = null; ui.memoEdit = false; ui.memoDraft = ''; ui.commentDraft = '';
+    if (leaving && !leaving.text.trim() && !memoHasTableContent(leaving) && !leaving.comments.length) {
+      state.memos = state.memos.filter(function (x) { return x !== leaving; });
+      saveState();
+    }
   }
   function deleteMemo(id) {
     var idx = -1; for (var i = 0; i < state.memos.length; i++) if (state.memos[i].id === id) idx = i;
@@ -3289,7 +3313,8 @@ datesSorted().forEach(function (d) {
           case 'memo-fav': if (id && id !== 'new') toggleMemoFav(id); break;
           case 'memo-edit': { var m = findMemo(id); if (!m) break; ui.memoEdit = true; ui.memoDraft = m.text; renderMemo(); var ta = $('#memo-edit-input'); if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); } break; }
           case 'memo-save': {
-            if (!String(ui.memoDraft).trim()) { showToast('내용을 입력하세요.'); var t2 = $('#memo-edit-input'); if (t2) t2.focus(); break; }
+            var sm = ui.memoOpen !== 'new' ? findMemo(ui.memoOpen) : null;
+            if (!String(ui.memoDraft).trim() && !(sm && sm.tables.length)) { showToast('내용을 입력하세요.'); var t2 = $('#memo-edit-input'); if (t2) t2.focus(); break; }
             if (!saveMemoEdit(false)) renderMemo();
             break;
           }
